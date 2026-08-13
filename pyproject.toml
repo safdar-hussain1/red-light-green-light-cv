@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "redlight"
+version = "1.0.0"
+description = "A computer-vision referee for Red Light, Green Light: play against your webcam, or run the engine on any footage."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Safdar Hussain", email = "safdar.eryx@gmail.com" }]
+dependencies = [
+    "numpy>=1.26",
+    "opencv-python>=4.9,<5",
+    "ultralytics>=8.3",
+]
+
+[project.optional-dependencies]
+audio = ["pygame>=2.5"]
+analysis = ["matplotlib>=3.8", "scikit-learn>=1.4", "jupyter", "ipykernel"]
+dev = ["pytest>=8"]
+
+[project.scripts]
+redlight = "redlight.cli:main"
+
+[project.urls]
+Homepage = "https://safdar-hussain1.github.io/red-light-green-light-cv/"
+Repository = "https://github.com/safdar-hussain1/red-light-green-light-cv"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+redlight = ["chant.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["slow: tests that load the YOLO model or full footage"]
