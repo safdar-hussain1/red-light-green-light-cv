@@ -195,6 +195,10 @@ class Game:
 
     def _flip_phase(self, now: float) -> list[Event]:
         events = []
+        # GameConfig.validate() requires phase_min_s and phase_max_s to be
+        # strictly positive, so every drawn phase length is > 0 and this
+        # loop always advances _phase_end_at past `now` in a finite number
+        # of iterations — it cannot spin forever even on a large time jump.
         while now >= self._phase_end_at:
             self.phase = Phase.RED if self.phase == Phase.GREEN else Phase.GREEN
             self._phase_started_at = self._phase_end_at

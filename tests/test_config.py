@@ -45,6 +45,20 @@ class TestGameConfigNegativeDurations:
             config.validate()
         assert "phase_max_s" in str(exc_info.value)
 
+    def test_zero_phase_min_s(self):
+        """phase_min_s cannot be zero: a zero-length phase is meaningless."""
+        config = GameConfig(phase_min_s=0.0, phase_max_s=5.0)
+        with pytest.raises(ConfigError) as exc_info:
+            config.validate()
+        assert "phase_min_s" in str(exc_info.value)
+
+    def test_zero_phase_max_s(self):
+        """phase_max_s cannot be zero: a zero-length phase is meaningless."""
+        config = GameConfig(phase_min_s=0.0, phase_max_s=0.0)
+        with pytest.raises(ConfigError) as exc_info:
+            config.validate()
+        assert "phase_max_s" in str(exc_info.value)
+
     def test_negative_grace_s(self):
         """grace_s cannot be negative."""
         config = GameConfig(grace_s=-1.0)

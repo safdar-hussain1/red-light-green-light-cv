@@ -58,10 +58,13 @@ class GameConfig:
             violations.append(f"countdown_s must be non-negative, got {self.countdown_s}")
         if self.duration_s < 0:
             violations.append(f"duration_s must be non-negative, got {self.duration_s}")
-        if self.phase_min_s < 0:
-            violations.append(f"phase_min_s must be non-negative, got {self.phase_min_s}")
-        if self.phase_max_s < 0:
-            violations.append(f"phase_max_s must be non-negative, got {self.phase_max_s}")
+        # Zero-length phases are meaningless for the game (and would spin the
+        # state machine's phase-flip loop forever), so phase_min_s/phase_max_s
+        # must be strictly positive, not merely non-negative.
+        if self.phase_min_s <= 0:
+            violations.append(f"phase_min_s must be positive, got {self.phase_min_s}")
+        if self.phase_max_s <= 0:
+            violations.append(f"phase_max_s must be positive, got {self.phase_max_s}")
         if self.grace_s < 0:
             violations.append(f"grace_s must be non-negative, got {self.grace_s}")
 

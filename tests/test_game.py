@@ -219,6 +219,66 @@ def test_seeded_schedule_is_reproducible_and_seed_dependent():
     assert same_a != different
 
 
+def test_catch_up_flip_matches_stepped_schedule():
+    """A single update() that skips multiple phase boundaries replays them in
+    order, and lands on exactly the same schedule as flipping one boundary
+    at a time — the RNG draw sequence does not depend on how the caller
+    chunks its `now` values.
+    """
+
+    def build(seed: int) -> Game:
+        cfg = make_config(seed=seed, countdown_s=1.0, phase_min_s=1.0, phase_max_s=3.0, duration_s=10_000.0)
+        game = Game(cfg)
+        game.start(0.0, [1])
+        game.update(1.0)  # -> GREEN; consumes the schedule's first draw
+        return game
+
+    seed = 123
+    rng = random.Random(seed)
+    lengths = [rng.uniform(1.0, 3.0) for _ in range(3)]  # GREEN, RED, GREEN
+    b1 = 1.0 + lengths[0]
+    b2 = b1 + lengths[1]
+    b3 = b2 + lengths[2]
+
+    stepped = build(seed)
+    stepped_events = []
+    stepped_events += stepped.update(b1)
+    stepped_events += stepped.update(b2)
+    stepped_events += stepped.update(b3)
+
+    jumped = build(seed)
+    jumped_events = jumped.update(b3)  # one call, skipping the b1 and b2 boundaries
+
+    assert len(jumped_events) >= 2  # at least two boundaries really were skipped in one call
+    assert jumped_events == stepped_events
+    assert [e.phase for e in jumped_events] == [Phase.RED, Phase.GREEN, Phase.RED]
+    assert jumped.phase == stepped.phase == Phase.RED
+
+
+def test_wipeout_wins_over_simultaneous_victory():
+    """When the last elimination and the match-clock expiry land on the same
+    tick, the match is ruled a wipeout, not a victory — eliminations are
+    applied, and only then is the outcome decided.
+    """
+    cfg = make_config(countdown_s=1.0, duration_s=2.0, phase_min_s=1.0, phase_max_s=1.0, grace_s=0.0)
+    game = Game(cfg)
+    game.start(0.0, [1, 2])
+
+    game.update(1.0)  # -> GREEN at t=1.0, match clock starts (duration_s=2.0 -> expires at t=3.0)
+    game.update(2.0)  # green (len 1.0) ends at t=2.0 -> RED, armed immediately (grace_s=0.0)
+
+    # At t=3.0 the match clock has also just expired (now - match_started_at == duration_s).
+    events = game.update(3.0, violations=[1, 2])
+    assert events == [
+        Event(EventType.PLAYER_ELIMINATED, Phase.RED, 1, "moved"),
+        Event(EventType.PLAYER_ELIMINATED, Phase.RED, 2, "moved"),
+        Event(EventType.PHASE_CHANGED, Phase.WIPEOUT),
+        Event(EventType.GAME_OVER, Phase.WIPEOUT),
+    ]
+    assert game.phase == Phase.WIPEOUT
+    assert game.alive_count == 0
+
+
 def test_events_are_well_formed():
     cfg = make_config(countdown_s=1.0, duration_s=100.0, phase_min_s=1.0, phase_max_s=1.0, grace_s=0.0)
     game = Game(cfg)
