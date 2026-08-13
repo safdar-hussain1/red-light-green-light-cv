@@ -9,13 +9,24 @@ calls.
 
 So motion here is measured in **body-fractions per second**: how far a
 player moved in one second, relative to their own apparent size on camera.
-Two things buy that:
 
-* Cropping at the player's box and resampling to a fixed window makes a
-  step mean the same thing whether the player is near or far, and whether
-  the camera is 480p or 4K. Distance and resolution divide out.
-* Dividing by the elapsed time between the two frames makes the score a
-  rate rather than a per-frame increment, so frame rate divides out too.
+Cropping at the player's box and resampling to a fixed window is what makes
+a step mean the same thing whether the player is near or far, and whether
+the camera is 480p or 4K. Distance and resolution divide out, for both
+metrics.
+
+Frame rate is handled differently by the two metrics, and it is worth being
+precise about which is which:
+
+* `flow_score` measures displacement, which really is proportional to the
+  time between frames, so dividing by dt genuinely turns it into a rate.
+  That holds within the operating band documented on the function.
+* `diff_score` counts changed pixels, and that count grows faster than
+  linearly with displacement — a bigger step does not just move more
+  pixels, it moves them past the change threshold. Dividing by dt does not
+  rescue it. The diff path is made frame-rate independent a different way:
+  `FrameSampler` scores on a fixed clock, so the same real motion produces
+  the same comparisons no matter how fast frames arrive.
 
 A sub-pixel deadband finishes the job. Sensor grain jitters flow estimates
 by a fraction of a pixel every frame, and dividing by a small dt would
@@ -43,6 +54,9 @@ DIFF_PIXEL_DELTA = 25
 
 MIN_CROP_PX = 8
 """Crops thinner than this carry no usable texture, so they get no score."""
+
+SAMPLE_INTERVAL_S = 0.1
+"""How often the referee actually scores, regardless of how fast frames arrive."""
 
 
 def crop_window(gray: np.ndarray, box: Detection) -> np.ndarray | None:
@@ -86,6 +100,14 @@ def flow_score(
     estimator always produces. The noise floor is subtracted before the
     result is divided by the window size and the elapsed time.
 
+    The score is frame-rate independent across steps of roughly 2.2 to 7
+    pixels of window displacement. Below that band the fixed sub-pixel
+    deadband takes a disproportionate bite out of the smaller step; above
+    it the flow estimator saturates and over-reads, so a fast step scores
+    higher than its true displacement. Over-reading errs toward calling
+    movement, which is the safe direction for a referee, but it does mean
+    the threshold is not a literal body-fraction figure at the fast end.
+
     Returns:
         Movement in body-fractions per second, or None if the box is
         unusable or dt is not positive.
@@ -122,11 +144,18 @@ def diff_score_window(prev_win: np.ndarray, cur_win: np.ndarray, dt: float) -> f
     pixels whose brightness moved by more than DIFF_PIXEL_DELTA, express
     that as a fraction of the window, and divide by the elapsed time.
 
+    Dividing by dt puts the result on a per-second footing but does **not**
+    make it frame-rate independent the way it does for flow. A changed-pixel
+    count grows faster than linearly with displacement, so halving the step
+    and halving the interval does not leave the score where it was. Callers
+    that need the diff metric to give the same verdict at any frame rate
+    must feed it through `FrameSampler`, which fixes the interval instead.
+
     This function is deliberately plain integer arithmetic on two uint8
-    windows — no blurring, no resizing, no floating-point thresholds. The
-    browser build runs the identical calculation, and the two are held to
-    bit-exact agreement against shared fixtures, so any change here has to
-    be mirrored there exactly.
+    windows — no blurring, no resizing, no floating-point thresholds — so
+    that the browser build can run the identical calculation. It is designed
+    to be verified against shared fixtures for bit-exact agreement, so any
+    change here has to be mirrored there exactly.
 
     Args:
         prev_win: Earlier WINDOW x WINDOW uint8 window.
@@ -134,10 +163,21 @@ def diff_score_window(prev_win: np.ndarray, cur_win: np.ndarray, dt: float) -> f
         dt: Seconds between the two windows; must be positive.
 
     Raises:
-        ValueError: If dt is not positive.
+        ValueError: If dt is not positive, or either window is not a
+            WINDOW x WINDOW uint8 array. This is the function the port is
+            held against, so a wrong-shaped input is a bug to surface, not
+            something to quietly score.
     """
     if dt <= 0:
         raise ValueError(f"dt must be positive, got {dt}")
+
+    expected = (WINDOW, WINDOW)
+    for name, win in (("prev_win", prev_win), ("cur_win", cur_win)):
+        if win.shape != expected or win.dtype != np.uint8:
+            raise ValueError(
+                f"{name} must be a {expected} uint8 array, "
+                f"got shape {win.shape} dtype {win.dtype}"
+            )
 
     delta = np.abs(prev_win.astype(np.int16) - cur_win.astype(np.int16))
     changed = int(np.count_nonzero(delta > DIFF_PIXEL_DELTA))
@@ -168,6 +208,58 @@ def diff_score(
     return diff_score_window(prev_win, cur_win, dt)
 
 
+class FrameSampler:
+    """Paces scoring on a fixed clock instead of on whatever the camera manages.
+
+    A capture loop hands over every frame it grabs. This holds them back and
+    releases a pair only once at least `interval_s` has passed since the last
+    pair it released, so comparisons are always made across roughly the same
+    slice of real time. A machine running at 60 frames a second and one
+    running at 30 end up judging the same motion over the same intervals.
+
+    That is what makes the diff metric fair across frame rates: rather than
+    trying to rescale a changed-pixel count that does not scale linearly, the
+    interval it is measured over is simply held fixed.
+
+    The comparison is always against the last *released* frame, never the last
+    frame offered, so nothing is silently measured over a shorter gap.
+    """
+
+    def __init__(self, interval_s: float = SAMPLE_INTERVAL_S):
+        self._interval_s = interval_s
+        self._last_gray: np.ndarray | None = None
+        self._last_ts: float | None = None
+
+    def offer(
+        self, gray: np.ndarray, ts: float
+    ) -> tuple[np.ndarray, np.ndarray, float] | None:
+        """Hand the sampler a frame and its timestamp in seconds.
+
+        Returns:
+            (previous_sampled_frame, this_frame, seconds_between_them) when
+            enough time has passed to be worth scoring, otherwise None. The
+            very first frame only primes the sampler and returns None.
+        """
+        if self._last_ts is None:
+            self._last_gray = gray
+            self._last_ts = ts
+            return None
+
+        dt = ts - self._last_ts
+        if dt < self._interval_s:
+            return None
+
+        previous = self._last_gray
+        self._last_gray = gray
+        self._last_ts = ts
+        return previous, gray, dt
+
+    def reset(self) -> None:
+        """Drop the held frame so the next offer primes a fresh interval."""
+        self._last_gray = None
+        self._last_ts = None
+
+
 @dataclass
 class MotionJudge:
     """Turns a stream of per-frame scores into eliminate / don't-eliminate calls.
@@ -193,8 +285,12 @@ class MotionJudge:
     threshold: float
     confirm_frames: int = 3
     smoothing: float = 0.5
-    _ema: dict[int, float] = field(default_factory=dict, repr=False, compare=False)
-    _streak: dict[int, int] = field(default_factory=dict, repr=False, compare=False)
+    _ema: dict[int, float] = field(
+        default_factory=dict, init=False, repr=False, compare=False
+    )
+    _streak: dict[int, int] = field(
+        default_factory=dict, init=False, repr=False, compare=False
+    )
 
     def update(self, track_id: int, score: float) -> bool:
         """Feed one frame's score for one player and get the verdict.
