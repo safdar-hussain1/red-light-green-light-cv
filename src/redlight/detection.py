@@ -66,6 +66,19 @@ class YoloDetector:
         return detections
 
 
+def _hog_passes_threshold(weight: float, conf: float) -> bool:
+    """Whether a raw HOG/SVM decision value clears the confidence threshold.
+
+    HOG's detectMultiScale reports an unbounded SVM decision value, not a
+    [0,1] probability like YOLO's confidence. Rather than invent a squashing
+    function with no principled basis, `conf` is compared directly against
+    that raw scale: higher means a stronger match, roughly 0.5-3.0 for solid
+    detections and near/below 0 for weak or spurious ones. Callers using the
+    HOG detector should tune `conf` empirically on that raw scale.
+    """
+    return weight >= conf
+
+
 class HogDetector:
     """Finds people with OpenCV's built-in HOG + linear SVM detector.
 
@@ -84,9 +97,10 @@ class HogDetector:
         )
         detections: list[Detection] = []
         for (x, y, w, h), weight in zip(boxes, weights):
-            detections.append(
-                Detection(x=int(x), y=int(y), w=int(w), h=int(h), conf=float(weight))
-            )
+            weight = float(weight)
+            if not _hog_passes_threshold(weight, self._conf):
+                continue
+            detections.append(Detection(x=int(x), y=int(y), w=int(w), h=int(h), conf=weight))
         return detections
 
 
