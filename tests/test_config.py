@@ -82,6 +82,20 @@ class TestGameConfigThreshold:
             config.validate()
         assert "threshold" in str(exc_info.value)
 
+    def test_diff_threshold_zero(self):
+        """diff_threshold cannot be zero."""
+        config = GameConfig(diff_threshold=0.0)
+        with pytest.raises(ConfigError) as exc_info:
+            config.validate()
+        assert "diff_threshold" in str(exc_info.value)
+
+    def test_diff_threshold_negative(self):
+        """diff_threshold cannot be negative."""
+        config = GameConfig(diff_threshold=-0.1)
+        with pytest.raises(ConfigError) as exc_info:
+            config.validate()
+        assert "diff_threshold" in str(exc_info.value)
+
 
 class TestGameConfigSmoothing:
     """Test validation of smoothing field."""
@@ -190,8 +204,8 @@ class TestGameConfigMultipleViolations:
         with pytest.raises(ConfigError) as exc_info:
             config.validate()
         error_msg = str(exc_info.value)
-        # Check that multiple violations are mentioned
-        violations = [
+        # Check that ALL expected violations are mentioned
+        expected_violations = [
             "countdown_s",
             "phase_min_s",
             "threshold",
@@ -199,5 +213,21 @@ class TestGameConfigMultipleViolations:
             "confirm_frames",
             "metric",
         ]
-        found_violations = sum(1 for v in violations if v in error_msg)
-        assert found_violations >= 2, f"Expected multiple violations, got: {error_msg}"
+        for violation in expected_violations:
+            assert violation in error_msg, (
+                f"Expected violation '{violation}' not found in error message. "
+                f"Got: {error_msg}"
+            )
+
+    def test_two_field_violations_reported_together(self):
+        """validate() reports both violations when two fields are bad."""
+        config = GameConfig(
+            countdown_s=-1.0,  # bad
+            threshold=0.0,  # bad
+        )
+        with pytest.raises(ConfigError) as exc_info:
+            config.validate()
+        error_msg = str(exc_info.value)
+        # Both violations must be present in the error message
+        assert "countdown_s" in error_msg, f"countdown_s not in: {error_msg}"
+        assert "threshold" in error_msg, f"threshold not in: {error_msg}"

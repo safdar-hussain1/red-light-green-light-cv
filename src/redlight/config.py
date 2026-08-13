@@ -22,7 +22,7 @@ class GameConfig:
         grace_s: Grace period in seconds.
         metric: Detection metric ("flow" for optical flow, "diff" for frame difference).
         threshold: Flow threshold (body fraction per second).
-        diff_threshold: Diff threshold for frame difference detection.
+        diff_threshold: Diff threshold for frame difference detection. Provisional value pending measured benchmark.
         confirm_frames: Number of frames to confirm motion before elimination.
         smoothing: Temporal smoothing factor, in (0, 1].
         detector: Object detector to use ("yolo").
