@@ -87,7 +87,14 @@ function mulberry32(seed) {
 
 /** Defaults mirroring `GameConfig` in `src/redlight/config.py`. */
 const DEFAULT_CONFIG = Object.freeze({
-  seed: 0,
+  // null means "pick one at construction", matching GameConfig's own `seed:
+  // int | None = None`. A fixed default would hand every visitor the
+  // identical run of light lengths, so the second game anyone plays would
+  // be the first one again — and a player who noticed could learn the
+  // schedule and beat the referee by counting rather than by holding still.
+  // The resolved seed is stored back on `config.seed`, so a match that did
+  // something interesting can still be replayed exactly by passing it back.
+  seed: null,
   countdownS: 3.0,
   durationS: 60.0,
   phaseMinS: 2.0,
@@ -150,10 +157,20 @@ function validateConfig(config) {
  * the same sequence of `now` values produce the identical schedule.
  */
 class Game {
-  /** @param {object} config Partial config; anything omitted takes its default. */
+  /**
+   * @param {object} config Partial config; anything omitted takes its
+   *   default. Omit `seed` (or pass null) to get a fresh random match; the
+   *   seed actually used is written back to `game.config.seed` so the run
+   *   can be reproduced later by passing that value in.
+   */
   constructor(config = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
     validateConfig(this.config);
+
+    if (this.config.seed === null || this.config.seed === undefined) {
+      // A full 32 bits, since that is what mulberry32 consumes.
+      this.config.seed = Math.floor(Math.random() * 4294967296);
+    }
 
     this.phase = Phase.LOBBY;
     /** @type {Map<number, {trackId: number, alive: boolean, eliminatedAt: number|null}>} */

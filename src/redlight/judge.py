@@ -176,7 +176,14 @@ def diff_score_window(prev_win: np.ndarray, cur_win: np.ndarray, dt: float) -> f
             held against, so a wrong-shaped input is a bug to surface, not
             something to quietly score.
     """
-    if dt <= 0:
+    # Written as `not dt > 0` rather than `dt <= 0` so that a NaN dt is
+    # rejected too: every comparison against NaN is False, so `dt <= 0`
+    # would wave it through and hand back a NaN score. A NaN score is worse
+    # than an error — it compares False against the threshold, so it reads
+    # as "not moving" and silently clears a player who might well have been.
+    # The browser port throws on NaN as well, and that agreement is part of
+    # what the shared fixtures are asserting.
+    if not dt > 0:
         raise ValueError(f"dt must be positive, got {dt}")
 
     expected = (WINDOW, WINDOW)

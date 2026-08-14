@@ -279,6 +279,24 @@ def test_diff_score_window_rejects_bad_windows():
         diff_score_window(np.zeros((32, 32), dtype=np.uint8), good, 0.1)
     with pytest.raises(ValueError):
         diff_score_window(good, good, 0.0)
+    with pytest.raises(ValueError):
+        diff_score_window(good, good, -0.1)
+
+
+def test_diff_score_window_rejects_nan_dt():
+    """A NaN interval is an error, not a score.
+
+    Every comparison against NaN is False, so a `dt <= 0` guard would let it
+    straight through and return a NaN score. That is the dangerous outcome:
+    NaN also compares False against the threshold, so it reads as "not
+    moving" and quietly clears a player instead of surfacing the broken
+    clock that produced it. The browser port throws here too, and the
+    parity suite asserts both do.
+    """
+    good = np.zeros((WINDOW, WINDOW), dtype=np.uint8)
+
+    with pytest.raises(ValueError):
+        diff_score_window(good, good, float("nan"))
 
 
 def test_degenerate_box_returns_none():

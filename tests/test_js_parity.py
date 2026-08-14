@@ -1,9 +1,17 @@
 """The browser judge and the Python judge must agree, and be proven to.
 
 The arena page ships its own JavaScript referee so a visitor can play in a
-browser with no install. That only means anything if it is the *same*
-referee: a call that would eliminate a player on the desktop engine has to
-eliminate them in the browser too, on the same frame, for the same reason.
+browser with no install. That only means anything if it scores the same way:
+two 96x96 windows and a dt have to produce the same number on both sides,
+and the same stream of scores has to produce the same eliminations.
+
+The boundary of the claim matters. What is pinned here is the scoring
+kernel — `diff_score_window`, `MotionJudge`, `FrameSampler` — and the game
+rules. What is *not* pinned is how a camera frame becomes a 96x96 window:
+`judge.crop_window` uses OpenCV's INTER_AREA resize and a 3x3 Gaussian
+blur, and the browser gets there through canvas. So these tests prove
+identical scoring of identical windows, not identical verdicts from an
+identical frame, and no copy anywhere should claim the latter.
 
 These tests hold the port to that claim rather than trusting it. Golden
 fixtures — real 96x96 uint8 window pairs, with the Python score recorded at

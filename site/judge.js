@@ -1,12 +1,20 @@
 /**
  * Motion scoring and the elimination decision, in the browser.
  *
- * This is the same referee the desktop engine runs, ported so a visitor can
- * play with nothing installed. "The same" is a claim that gets tested rather
- * than asserted: `tests/test_js_parity.py` replays golden 96x96 window pairs
- * through this file under node and requires the numbers to match Python
- * bit for bit. Every line here has a counterpart in `src/redlight/judge.py`,
- * and a change to one that is not mirrored in the other fails that suite.
+ * This is the desktop engine's scoring kernel, ported so a visitor can play
+ * with nothing installed, and the port is tested rather than asserted:
+ * `tests/test_js_parity.py` replays golden 96x96 window pairs through this
+ * file under node and requires the numbers to match Python bit for bit.
+ *
+ * Be precise about what that covers. `diff_score_window`, `MotionJudge` and
+ * `FrameSampler` are ported here and pinned by fixtures. What comes *before*
+ * them is not: `crop_window` in `src/redlight/judge.py` clamps the player's
+ * box, resamples with OpenCV's INTER_AREA, and applies a 3x3 Gaussian blur,
+ * and the browser reaches its 96x96 windows by its own canvas path. So the
+ * proven claim is that both sides score identical windows identically — not
+ * that both sides derive identical windows from an identical camera frame.
+ * Anything that changes how a window is *produced* is outside what these
+ * fixtures can vouch for.
  *
  * The arithmetic is deliberately plain — integer comparisons and two
  * divisions, no blurring, no resizing, no floating-point thresholds. That is
@@ -50,9 +58,14 @@ const TIMESTAMP_TOLERANCE_S = 1e-9;
  * This stands in for Python's `dtype != np.uint8` check, and it is a check
  * worth keeping rather than a formality: a plain `Array` of floats would
  * score perfectly happily here and give an answer the desktop engine would
- * never produce. `Uint8ClampedArray` is included because that is what
- * `CanvasRenderingContext2D.getImageData` hands back, so the arena's own
- * frames pass without a copy.
+ * never produce.
+ *
+ * `Uint8ClampedArray` is accepted alongside `Uint8Array` purely as a
+ * convenience. It is *not* a zero-copy path from the canvas:
+ * `getImageData` returns interleaved RGBA at 4 bytes per pixel, so a caller
+ * always has to walk it into a single-channel 96x96 window first. Accepting
+ * the clamped type just means that conversion pass can write into the
+ * natural array type without a further copy to convert it.
  */
 function isByteWindow(value) {
   return value instanceof Uint8Array || value instanceof Uint8ClampedArray;

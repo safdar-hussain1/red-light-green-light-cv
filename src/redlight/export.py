@@ -8,15 +8,24 @@ noise, single pixels sitting exactly on the change threshold and one step
 past it, block shifts, flat textures. Those recorded numbers are the
 contract. `tests/test_js_parity.py` replays the same pairs through
 `site/judge.js` and requires bit-identical answers, so "the browser runs the
-same judge" is a tested fact rather than a claim in a README.
+same scoring kernel" is a tested fact rather than a claim in a README.
+
+What that does and does not cover is worth stating plainly, because the
+distinction is easy to lose in a sentence. The fixtures pin the *scoring*
+path: given two 96x96 uint8 windows and a dt, both languages produce the
+same number. They say nothing about how those windows were produced.
+`judge.crop_window` clamps the detection box, resamples with OpenCV's
+INTER_AREA and applies a 3x3 Gaussian blur; the browser arrives at its
+windows through canvas instead. So the honest claim is identical scoring of
+identical windows, not identical verdicts from an identical camera frame.
 
 `build_site` collapses the arena into a single HTML file: the page shell,
 every stylesheet and script from `site/`, and one `window.RL_DATA` blob
 carrying the engine's constants, the published benchmark results, the chant,
 and those same golden fixtures. One file, no build step, no server — drop it
 on a static host and it works. The fixtures ride along so the shipped page
-can prove the parity claim in the visitor's own browser via `?selftest=1`,
-in whatever engine actually loaded it.
+can re-run that scoring-kernel comparison in the visitor's own browser via
+`?selftest=1`, in whatever engine actually loaded it.
 
 The build is deterministic on purpose. `docs/index.html` is a committed
 artefact, and a build that varied run to run would make every commit of it a
@@ -333,17 +342,38 @@ def _script_paths() -> list[Path]:
     return ordered
 
 
+def _check_no_closing_tag(source: str, path: Path, tag: str) -> None:
+    """Refuse to inline a source that would close its own wrapper tag.
+
+    An HTML parser ends a `<script>` block at the first `</script` it sees,
+    even inside a string or a comment. A source containing one would truncate
+    the page at that point and dump the rest as body text — and the failure
+    looks like a rendering bug a long way from its cause. Cheaper to refuse
+    the build than to debug the page.
+    """
+    if f"</{tag}" in source.lower():
+        raise ValueError(
+            f"{path} contains a literal '</{tag}', which would end the inlined "
+            f"<{tag}> block early and truncate the page. Split it (e.g. "
+            f"'<\\/{tag}') before inlining."
+        )
+
+
 def _inline_styles() -> str:
     blocks = []
     for path in sorted(SITE_DIR.glob("*.css")):
-        blocks.append(f"<style>\n/* {path.name} */\n{path.read_text(encoding='utf-8')}</style>")
+        source = path.read_text(encoding="utf-8")
+        _check_no_closing_tag(source, path, "style")
+        blocks.append(f"<style>\n/* {path.name} */\n{source}</style>")
     return "\n".join(blocks)
 
 
 def _inline_scripts() -> str:
     blocks = []
     for path in _script_paths():
-        blocks.append(f"<script>\n// {path.name}\n{path.read_text(encoding='utf-8')}</script>")
+        source = path.read_text(encoding="utf-8")
+        _check_no_closing_tag(source, path, "script")
+        blocks.append(f"<script>\n// {path.name}\n{source}</script>")
     return "\n".join(blocks)
 
 
@@ -370,9 +400,17 @@ def _site_data() -> dict:
     defaults = GameConfig()
 
     if not FIXTURES_PATH.exists():
-        # Deterministic and seeded, so generating it here produces exactly
-        # the bytes that would have been committed.
-        write_judge_fixtures(FIXTURES_PATH)
+        # Deliberately not generated on the fly. The golden file is the
+        # contract the browser is held to, and a build that quietly
+        # manufactures its own contract when the real one is missing would
+        # ship a page whose selftest proves nothing — it would be checking
+        # the port against numbers produced by the same run. Generating it
+        # is an explicit act, and the result gets committed and reviewed.
+        raise FileNotFoundError(
+            f"golden judge fixtures not found at {FIXTURES_PATH}. "
+            "Run redlight.export.write_judge_fixtures() first and commit the "
+            "result — the site build will not generate its own contract."
+        )
     fixtures = json.loads(FIXTURES_PATH.read_text(encoding="utf-8"))
 
     return {
@@ -436,6 +474,15 @@ def build_site(out: str | Path = DEFAULT_SITE_OUT) -> str:
     # is deliberately off — the benchmark's own key order is meaningful, and
     # Python preserves it, so the output stays stable without reordering.
     data = json.dumps(_site_data(), separators=(",", ":"), ensure_ascii=False)
+
+    # The blob is emitted inside a <script> block, where an HTML parser ends
+    # the block at the first `</script` it sees — string literal or not. A
+    # benchmark note or a trace label containing `</script>` would therefore
+    # truncate the page. `\/` is a valid JSON escape for `/`, so escaping
+    # every `</` parses back to exactly the same string while making that
+    # sequence impossible to form. Cheap, and it removes a whole class of
+    # "the page renders half-way and then shows raw JSON" failure.
+    data = data.replace("</", "<\\/")
 
     html = html.replace(STYLES_MARKER, _inline_styles())
     html = html.replace(SCRIPTS_MARKER, _inline_scripts())
