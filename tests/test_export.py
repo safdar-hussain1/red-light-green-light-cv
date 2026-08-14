@@ -59,6 +59,10 @@ def external_resources(html: str) -> list[tuple[str, str]]:
         if re.match(r"https?://|//", match.group(1)):
             found.append(("script", match.group(0)))
     for match in re.finditer(r"<link\b[^>]*\bhref\s*=\s*[\"']([^\"']+)[\"'][^>]*>", html):
+        # rel="canonical" is metadata for crawlers — the browser never fetches
+        # its href, so there are no bytes for an integrity hash to pin.
+        if re.search(r"rel\s*=\s*[\"']canonical[\"']", match.group(0)):
+            continue
         if re.match(r"https?://|//", match.group(1)):
             found.append(("link", match.group(0)))
     return found
