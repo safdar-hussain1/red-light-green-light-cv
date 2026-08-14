@@ -25,7 +25,8 @@ class GameConfig:
         diff_threshold: Diff threshold for frame difference detection. Provisional value pending measured benchmark.
         confirm_frames: Number of frames to confirm motion before elimination.
         smoothing: Temporal smoothing factor, in (0, 1].
-        detector: Object detector to use ("yolo").
+        detector: Object detector to use ("yolo" for accuracy, "hog" for a
+            fast, weights-free fallback).
         conf: Confidence threshold for detector.
         max_misses: Maximum consecutive frames without detection before resetting.
     """
@@ -99,8 +100,11 @@ class GameConfig:
                 f"metric must be one of {valid_metrics}, got {self.metric!r}"
             )
 
-        # Check detector is valid
-        valid_detectors = {"yolo"}
+        # Check detector is valid. "hog" is accepted alongside "yolo": both
+        # are real, supported choices in detection.make_detector (yolo for
+        # accuracy, hog as a fast fallback needing no model weights), so
+        # both must pass validation for a caller to actually use hog.
+        valid_detectors = {"yolo", "hog"}
         if self.detector not in valid_detectors:
             violations.append(
                 f"detector must be one of {valid_detectors}, got {self.detector!r}"

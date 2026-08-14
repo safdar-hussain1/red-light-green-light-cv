@@ -66,6 +66,7 @@ def run(
     auto_start_frames: int | None = None,
     skip: int = 0,
     max_seconds: float | None = None,
+    mute: bool = False,
 ) -> MatchReport:
     """Run one match end to end and report how it finished.
 
@@ -91,6 +92,10 @@ def run(
     match can be captured without a display attached. `max_seconds` is a
     safety stop, measured on the source's own timestamps: if the match
     hasn't finished by then, the run stops and reports `"aborted"`.
+
+    `mute`, if set, silences the chant and buzzer even in an interactive
+    (non-headless) run; a headless run is already silent regardless, since
+    `Speaker` is muted whenever `headless` is set.
 
     `config` is used as given — call `config.validate()` yourself first if
     you want bad settings rejected with a readable message; this function
@@ -127,7 +132,7 @@ def run(
     )
     sampler = FrameSampler()
     game = Game(config)
-    speaker = Speaker(muted=headless)
+    speaker = Speaker(muted=headless or mute)
     hud = Hud()
 
     eliminations: list[tuple[int, float, str]] = []
