@@ -9,6 +9,7 @@ the real CLI -> `app.run` path end to end.
 from __future__ import annotations
 
 import argparse
+import json
 
 import pytest
 
@@ -170,20 +171,28 @@ class TestMakeAudio:
         assert "s)" in out  # duration printed, e.g. "(3.45s)"
 
 
-class TestLazyModulesNotYetAvailable:
-    """`benchmark.py` (Task 9) and `export.py` (Task 11) don't exist yet.
-    These pin today's graceful-degradation behavior; once those modules
-    land, these tests should be replaced with real ones exercising them.
+class TestBenchmark:
+    """The `benchmark` subcommand drives the real harness, so this runs it
+    in `--fast` mode against a temporary output path. `tests/test_benchmark.py`
+    is where the results themselves are checked; here it is only the wiring.
     """
 
-    def test_benchmark_reports_actionable_error_and_exits_one(self, capsys):
-        code = cli.main(["benchmark", "--fast"])
+    def test_writes_results_json_and_exits_zero(self, tmp_path):
+        out_path = tmp_path / "benchmark_results.json"
 
-        assert code == 1
-        err = capsys.readouterr().err
-        assert "benchmark" in err.lower()
-        assert "not available" in err
-        assert "Traceback" not in err
+        code = cli.main(["benchmark", "--fast", "--out", str(out_path)])
+
+        assert code == 0
+        results = json.loads(out_path.read_text())
+        assert results["meta"]["fast"] is True
+        assert results["classifiers"]
+
+
+class TestLazyModulesNotYetAvailable:
+    """`export.py` (Task 11) doesn't exist yet. This pins today's
+    graceful-degradation behavior; once that module lands, this test should
+    be replaced with a real one exercising it.
+    """
 
     def test_build_site_reports_actionable_error_and_exits_one(self, capsys):
         code = cli.main(["build-site"])
