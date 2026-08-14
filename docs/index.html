@@ -3,11 +3,18 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Red Light, Green Light — a computer-vision referee</title>
+    <title>Red Light, Green Light — play the Squid Game challenge against a computer-vision referee</title>
     <meta
       name="description"
-      content="Play Red Light, Green Light against a computer-vision referee in your browser. The same judge the Python engine runs, proven by shared fixtures."
+      content="Play the Squid Game challenge — Red Light, Green Light — in your browser against a computer-vision referee. The same judge the Python engine runs, proven by shared fixtures."
     />
+    <meta property="og:title" content="Red Light, Green Light — play the Squid Game challenge against a computer-vision referee" />
+    <meta
+      property="og:description"
+      content="Play the Squid Game challenge — Red Light, Green Light — in your browser against a computer-vision referee. Nothing is uploaded, nothing is recorded."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://safdar-hussain1.github.io/red-light-green-light-cv/" />
     <meta name="color-scheme" content="light dark" />
 
     <script>
@@ -662,10 +669,14 @@ section {
   background-color: var(--red-wash);
 }
 
-/* The video only exists once there is a camera behind it. An empty video
-   element paints black, and black under a light theme turns the idle copy
-   into dark text on a dark rectangle. */
-.stage video {
+/* The live camera feed only exists once there is a camera behind it. An
+   empty video element paints black, and black under a light theme turns the
+   idle copy into dark text on a dark rectangle. Scoped to `#cam` rather than
+   the more general `.stage video` on purpose: the replay scene also puts a
+   `<video>` in the stage (the recorded match), and a bare descendant
+   selector here would out-specificity `.replay-video` and hide it too,
+   since the replay never sets `data-live="true"`. */
+#cam {
   display: none;
   position: absolute;
   inset: 0;
@@ -677,7 +688,7 @@ section {
   background: #000;
 }
 
-.stage[data-live="true"] video {
+.stage[data-live="true"] #cam {
   display: block;
 }
 
@@ -1070,14 +1081,72 @@ section {
   height: 44px;
 }
 
-/* The replay: the recorded match, with no camera anywhere near it. */
+/* The replay: the recorded match, with no camera anywhere near it.
+   Two views share this scene — a real annotated video and the older
+   animated data view — switched by `.replay-tabs` without either one
+   leaving the DOM, so flipping between them is instant. */
 .replay-scene {
   position: absolute;
   inset: 0;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
   padding: clamp(1rem, 4vw, 2.4rem);
   pointer-events: none;
+}
+
+.replay-tabs {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-bottom: 0.8rem;
+  pointer-events: auto;
+}
+
+.replay-tab {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 0.35rem 0.85rem;
+  border-radius: 999px;
+  border: 1px solid var(--rule-strong);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.replay-tab[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
+}
+
+.replay-view {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-height: 0;
+}
+
+.replay-view[hidden] {
+  display: none;
+}
+
+.replay-video {
+  display: block;
+  align-self: center;
+  justify-self: center;
+  width: 100%;
+  max-height: 100%;
+  /* The recorded footage is 768x576. Pinning the ratio keeps the frame a
+     real height before the video's own metadata has loaded — without it
+     the `minmax(0, 1fr)` row above collapses to nothing and the poster
+     never gets anywhere to paint, on a slow connection or in a headless
+     screenshot taken before `loadedmetadata` fires. */
+  aspect-ratio: 4 / 3;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.28);
+  background: #000;
+  pointer-events: auto;
 }
 
 .replay-field {
@@ -1950,11 +2019,12 @@ footer p {
             <span class="w-green">Green light</span>
           </h1>
           <p class="lede">
-            Stand in front of your webcam and hold still. A referee finds
-            everyone in frame, measures how much of each body changes every
-            tenth of a second, and calls out anyone who moves while the light
-            is red. It runs in this tab, on your machine, and it is the same
-            scoring kernel the Python engine uses.
+            Stand in front of your webcam and hold still — the Squid Game
+            challenge, refereed live. A referee finds everyone in frame,
+            measures how much of each body changes every tenth of a second,
+            and calls out anyone who moves while the light is red. It runs in
+            this tab, on your machine, and it is the same scoring kernel the
+            Python engine uses.
           </p>
           <div class="cta-row">
             <a class="btn btn-play" href="#arena" data-play-scroll>Play</a>
@@ -2008,8 +2078,8 @@ footer p {
                   <h3>Ready when you are</h3>
                   <p>
                     Your browser will ask for the camera. Nothing is uploaded
-                    and nothing is recorded — if you would rather not, the
-                    recorded match runs on baked-in data.
+                    and nothing is recorded — if you would rather not, watch
+                    the referee call a real recorded match instead.
                   </p>
                   <div class="cta-row" style="justify-content: center">
                     <button class="btn btn-play" id="btnPlay" type="button">Play</button>
@@ -4585,15 +4655,22 @@ class Arena {
   /* -------------------------------------------------------------- replay */
 
   /**
-   * The recorded match, animated — for anyone without a camera, or unwilling.
+   * The recorded match — for anyone without a camera, or unwilling.
    *
-   * The players, the eliminations, their times and their reasons are the
-   * recorded ones from `RL_DATA.benchmark.demo_match`: a real run of the
-   * Python engine over the benchmark footage. The light schedule is not
-   * recorded, so it is reconstructed here to the only shape consistent with
-   * those calls — every "moved" call lands on an armed red light, and every
-   * phase length stays inside the 1.5–3.0 s bounds the run was configured
-   * with. The page says so where the replay is shown.
+   * Two views of the same seeded run share this scene. The primary one is
+   * `docs/demo_match.mp4`: real HUD-annotated footage of `redlight play`
+   * refereeing the benchmark video, boxes and verdicts and all — not staged,
+   * the same run the README's `redlight benchmark` command reproduces. The
+   * second is the older animated data view: the players, the eliminations,
+   * their times and their reasons, read from `RL_DATA.benchmark.demo_match`.
+   * Its light schedule is not recorded, so it is reconstructed here to the
+   * only shape consistent with those calls — every "moved" call lands on an
+   * armed red light, and every phase length stays inside the 1.5–3.0 s
+   * bounds the run was configured with. The page says so where it is shown.
+   *
+   * Both views are built every time so switching between them is instant;
+   * only the video actually costs bytes, and it is fetched once and cached
+   * like any other same-origin asset.
    */
   startReplay() {
     this.stopReplay();
@@ -4628,11 +4705,42 @@ class Arena {
     const scene = document.createElement("div");
     scene.className = "replay-scene";
     scene.innerHTML =
+      '<div class="replay-tabs" role="tablist" aria-label="Recorded match view">' +
+      '<button type="button" class="replay-tab" data-view="video" aria-pressed="true">' +
+      "Recorded video</button>" +
+      '<button type="button" class="replay-tab" data-view="data" aria-pressed="false">' +
+      "Data replay</button>" +
+      "</div>" +
+      '<div class="replay-view" data-view="video">' +
+      '<video class="replay-video" src="demo_match.mp4" poster="demo_poster.jpg" ' +
+      'muted controls loop playsinline></video>' +
+      '<p class="replay-note">The referee calling a real recorded match: ' +
+      "public benchmark footage of pedestrians in a courtyard, playing as the " +
+      "runners. Every box, meter and verdict here is the engine's, not staged. " +
+      "Seeded and reproducible — <code>redlight benchmark</code> from the " +
+      "README's install steps replays this exact match.</p>" +
+      "</div>" +
+      '<div class="replay-view" data-view="data" hidden>' +
       '<div class="replay-field" id="replayField"></div>' +
-      '<p class="replay-note">Recorded match: ' + demo.players + " players, " +
+      '<p class="replay-note">Data replay: ' + demo.players + " players, " +
       demo.eliminations.length + " calls, " + demo.survivors +
-      " left standing. Light schedule reconstructed to fit the recorded calls.</p>";
+      " left standing. Light schedule reconstructed to fit the recorded calls.</p>" +
+      "</div>";
     this.overlay.appendChild(scene);
+
+    const tabs = scene.querySelectorAll(".replay-tab");
+    const views = scene.querySelectorAll(".replay-view");
+    const video = scene.querySelector(".replay-video");
+    for (const tab of tabs) {
+      tab.addEventListener("click", () => {
+        for (const t of tabs) t.setAttribute("aria-pressed", String(t === tab));
+        for (const v of views) v.hidden = v.dataset.view !== tab.dataset.view;
+        if (tab.dataset.view === "video" && video) video.play().catch(() => {});
+        else if (video) video.pause();
+      });
+    }
+    if (video) video.play().catch(() => {});
+
     const field = scene.querySelector("#replayField");
     for (const token of tokens) {
       const node = document.createElement("div");
@@ -4727,7 +4835,11 @@ class Arena {
       this.replayTimer = null;
     }
     const scene = this.overlay.querySelector(".replay-scene");
-    if (scene) scene.remove();
+    if (scene) {
+      const video = scene.querySelector(".replay-video");
+      if (video) video.pause();
+      scene.remove();
+    }
   }
 }
 

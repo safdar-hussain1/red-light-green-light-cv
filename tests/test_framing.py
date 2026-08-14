@@ -16,9 +16,12 @@ addition to an allowlist.
 
 Three groups of patterns, for three different failure modes:
 
-* **Borrowed identity.** Naming somebody else's property, or a year, ties
-  this project to something it is not and dates it to a moment it is not
-  from.
+* **Dating the project.** A year ties this project to a moment it is not
+  from, so it stays banned. The show that made this playground game
+  recognisable is not: naming it is how somebody searching for it finds this
+  project, and that is worth more than the caution the phrase used to buy.
+  What still is not here is the show's actual audio or artwork — the name is
+  a fact about the game, not a license to use what the name points at.
 * **Coursework framing.** "College", "university", "coursework" describe why
   something was made rather than what it does, and a reader who wanted to
   know what it does now has to look past that.
@@ -51,8 +54,6 @@ scanner is the whole of the exemption — there is no allowlist beside it, and
 """
 
 BANNED = (
-    r"squid game",
-    r"netflix",
     r"\b2023\b",
     r"college",
     r"university",

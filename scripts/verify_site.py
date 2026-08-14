@@ -61,6 +61,7 @@ import functools
 import html
 import http.server
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -378,17 +379,37 @@ def serve(directory: Path):
     return httpd, httpd.server_address[1]
 
 
+SIDECAR_ASSETS = ("demo_match.mp4", "demo_poster.jpg")
+"""Files `docs/index.html` references by a same-origin relative path.
+
+Everything else on the page is inlined at build time, but the recorded
+match video is not — it ships as a sibling file next to `docs/index.html`
+(see `redlight.export`'s docstring for why). A stubbed copy of the page
+served from a bare temp directory would 404 on it, so the recorded-match
+screenshot would silently show a broken video with no assertion to catch
+it. Copying these alongside the stub keeps that path honest.
+"""
+
+
 def stubbed_page(destination: Path) -> None:
     """Write a copy of the built page with the verification stubs injected.
 
     The stubs go into the head, ahead of everything the arena defines, and
     the held image goes at the end of the body where it delays the load
     event without delaying anything the page does.
+
+    Also copies the page's sidecar assets (the recorded-match video and its
+    poster) next to the stub, so a screenshot of the replay actually shows
+    what a visitor would see rather than a 404'd `<video>`.
     """
     html = PAGE.read_text(encoding="utf-8")
     html = html.replace("</head>", INJECTION + "</head>", 1)
     html = html.replace("</body>", HOLD_MARKUP.format(ms=HOLD_MS) + "</body>", 1)
     destination.write_text(html, encoding="utf-8")
+    for name in SIDECAR_ASSETS:
+        source = PAGE.parent / name
+        if source.exists():
+            shutil.copy(source, destination.parent / name)
 
 
 # --------------------------------------------------------------------------

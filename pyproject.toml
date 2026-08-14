@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "redlight"
 version = "1.0.0"
-description = "A computer-vision referee for Red Light, Green Light: play against your webcam, or run the engine on any footage."
+description = "A computer-vision referee for Red Light, Green Light — the Squid Game challenge — play against your webcam, or run the engine on any footage."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }

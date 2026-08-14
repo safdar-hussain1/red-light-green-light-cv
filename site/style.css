@@ -617,10 +617,14 @@ section {
   background-color: var(--red-wash);
 }
 
-/* The video only exists once there is a camera behind it. An empty video
-   element paints black, and black under a light theme turns the idle copy
-   into dark text on a dark rectangle. */
-.stage video {
+/* The live camera feed only exists once there is a camera behind it. An
+   empty video element paints black, and black under a light theme turns the
+   idle copy into dark text on a dark rectangle. Scoped to `#cam` rather than
+   the more general `.stage video` on purpose: the replay scene also puts a
+   `<video>` in the stage (the recorded match), and a bare descendant
+   selector here would out-specificity `.replay-video` and hide it too,
+   since the replay never sets `data-live="true"`. */
+#cam {
   display: none;
   position: absolute;
   inset: 0;
@@ -632,7 +636,7 @@ section {
   background: #000;
 }
 
-.stage[data-live="true"] video {
+.stage[data-live="true"] #cam {
   display: block;
 }
 
@@ -1025,14 +1029,72 @@ section {
   height: 44px;
 }
 
-/* The replay: the recorded match, with no camera anywhere near it. */
+/* The replay: the recorded match, with no camera anywhere near it.
+   Two views share this scene — a real annotated video and the older
+   animated data view — switched by `.replay-tabs` without either one
+   leaving the DOM, so flipping between them is instant. */
 .replay-scene {
   position: absolute;
   inset: 0;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
   padding: clamp(1rem, 4vw, 2.4rem);
   pointer-events: none;
+}
+
+.replay-tabs {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-bottom: 0.8rem;
+  pointer-events: auto;
+}
+
+.replay-tab {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 0.35rem 0.85rem;
+  border-radius: 999px;
+  border: 1px solid var(--rule-strong);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.replay-tab[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
+}
+
+.replay-view {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-height: 0;
+}
+
+.replay-view[hidden] {
+  display: none;
+}
+
+.replay-video {
+  display: block;
+  align-self: center;
+  justify-self: center;
+  width: 100%;
+  max-height: 100%;
+  /* The recorded footage is 768x576. Pinning the ratio keeps the frame a
+     real height before the video's own metadata has loaded — without it
+     the `minmax(0, 1fr)` row above collapses to nothing and the poster
+     never gets anywhere to paint, on a slow connection or in a headless
+     screenshot taken before `loadedmetadata` fires. */
+  aspect-ratio: 4 / 3;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.28);
+  background: #000;
+  pointer-events: auto;
 }
 
 .replay-field {

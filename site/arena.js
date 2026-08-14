@@ -982,15 +982,22 @@ class Arena {
   /* -------------------------------------------------------------- replay */
 
   /**
-   * The recorded match, animated — for anyone without a camera, or unwilling.
+   * The recorded match — for anyone without a camera, or unwilling.
    *
-   * The players, the eliminations, their times and their reasons are the
-   * recorded ones from `RL_DATA.benchmark.demo_match`: a real run of the
-   * Python engine over the benchmark footage. The light schedule is not
-   * recorded, so it is reconstructed here to the only shape consistent with
-   * those calls — every "moved" call lands on an armed red light, and every
-   * phase length stays inside the 1.5–3.0 s bounds the run was configured
-   * with. The page says so where the replay is shown.
+   * Two views of the same seeded run share this scene. The primary one is
+   * `docs/demo_match.mp4`: real HUD-annotated footage of `redlight play`
+   * refereeing the benchmark video, boxes and verdicts and all — not staged,
+   * the same run the README's `redlight benchmark` command reproduces. The
+   * second is the older animated data view: the players, the eliminations,
+   * their times and their reasons, read from `RL_DATA.benchmark.demo_match`.
+   * Its light schedule is not recorded, so it is reconstructed here to the
+   * only shape consistent with those calls — every "moved" call lands on an
+   * armed red light, and every phase length stays inside the 1.5–3.0 s
+   * bounds the run was configured with. The page says so where it is shown.
+   *
+   * Both views are built every time so switching between them is instant;
+   * only the video actually costs bytes, and it is fetched once and cached
+   * like any other same-origin asset.
    */
   startReplay() {
     this.stopReplay();
@@ -1025,11 +1032,42 @@ class Arena {
     const scene = document.createElement("div");
     scene.className = "replay-scene";
     scene.innerHTML =
+      '<div class="replay-tabs" role="tablist" aria-label="Recorded match view">' +
+      '<button type="button" class="replay-tab" data-view="video" aria-pressed="true">' +
+      "Recorded video</button>" +
+      '<button type="button" class="replay-tab" data-view="data" aria-pressed="false">' +
+      "Data replay</button>" +
+      "</div>" +
+      '<div class="replay-view" data-view="video">' +
+      '<video class="replay-video" src="demo_match.mp4" poster="demo_poster.jpg" ' +
+      'muted controls loop playsinline></video>' +
+      '<p class="replay-note">The referee calling a real recorded match: ' +
+      "public benchmark footage of pedestrians in a courtyard, playing as the " +
+      "runners. Every box, meter and verdict here is the engine's, not staged. " +
+      "Seeded and reproducible — <code>redlight benchmark</code> from the " +
+      "README's install steps replays this exact match.</p>" +
+      "</div>" +
+      '<div class="replay-view" data-view="data" hidden>' +
       '<div class="replay-field" id="replayField"></div>' +
-      '<p class="replay-note">Recorded match: ' + demo.players + " players, " +
+      '<p class="replay-note">Data replay: ' + demo.players + " players, " +
       demo.eliminations.length + " calls, " + demo.survivors +
-      " left standing. Light schedule reconstructed to fit the recorded calls.</p>";
+      " left standing. Light schedule reconstructed to fit the recorded calls.</p>" +
+      "</div>";
     this.overlay.appendChild(scene);
+
+    const tabs = scene.querySelectorAll(".replay-tab");
+    const views = scene.querySelectorAll(".replay-view");
+    const video = scene.querySelector(".replay-video");
+    for (const tab of tabs) {
+      tab.addEventListener("click", () => {
+        for (const t of tabs) t.setAttribute("aria-pressed", String(t === tab));
+        for (const v of views) v.hidden = v.dataset.view !== tab.dataset.view;
+        if (tab.dataset.view === "video" && video) video.play().catch(() => {});
+        else if (video) video.pause();
+      });
+    }
+    if (video) video.play().catch(() => {});
+
     const field = scene.querySelector("#replayField");
     for (const token of tokens) {
       const node = document.createElement("div");
@@ -1124,7 +1162,11 @@ class Arena {
       this.replayTimer = null;
     }
     const scene = this.overlay.querySelector(".replay-scene");
-    if (scene) scene.remove();
+    if (scene) {
+      const video = scene.querySelector(".replay-video");
+      if (video) video.pause();
+      scene.remove();
+    }
   }
 }
 

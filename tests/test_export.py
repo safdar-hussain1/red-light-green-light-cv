@@ -129,6 +129,45 @@ def test_shell_has_the_regions_the_arena_will_fill(html):
         assert anchor in html, f"missing page region {anchor!r}"
 
 
+MAX_DEMO_VIDEO_BYTES = 5 * 1024 * 1024
+"""Five megabytes: comfortably over the ~2 MB H.264 encode, still small
+enough to serve same-origin next to the page without noticeably slowing it
+down."""
+
+
+def test_recorded_match_video_is_shipped_and_referenced(html):
+    """`docs/demo_match.mp4` exists, is small, and the built page points at it.
+
+    The video is not inlined into `RL_DATA` — at several megabytes it would
+    blow the page's own size budget — so it ships as a same-origin sibling
+    file next to `docs/index.html` instead, and the arena references it by a
+    bare relative path (`demo_match.mp4`) rather than an absolute URL, which
+    is exactly what `test_no_local_asset_references_survive_the_build` would
+    otherwise flag for a `<script>` or `<link>`. A `<video>` tag is neither,
+    so that check does not apply here, and this test covers the video's own
+    promise instead: the file is committed, it is small, and the page that
+    is supposed to play it actually names it.
+    """
+    video_path = REPO_ROOT / "docs" / "demo_match.mp4"
+    assert video_path.exists(), f"{video_path} should be committed alongside docs/index.html"
+
+    size = video_path.stat().st_size
+    assert size < MAX_DEMO_VIDEO_BYTES, (
+        f"docs/demo_match.mp4 is {size / 1024 / 1024:.1f} MiB, over the "
+        f"{MAX_DEMO_VIDEO_BYTES / 1024 / 1024:.0f} MiB budget"
+    )
+
+    with open(video_path, "rb") as handle:
+        # The ftyp box near the start of an MP4 names its brand; isom/mp42
+        # are what libx264 + faststart produce. This is a cheap check that
+        # the file is actually a browser-playable H.264 mp4 and not, say, an
+        # OpenCV mp4v file that happens to share the extension.
+        header = handle.read(64)
+    assert b"ftyp" in header, "docs/demo_match.mp4 does not look like a valid mp4 container"
+
+    assert "demo_match.mp4" in html, "the built page never references the recorded match video"
+
+
 def test_site_fits_in_the_size_budget(built_site):
     size = built_site.stat().st_size
     assert size < MAX_SITE_BYTES, (

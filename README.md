@@ -4,7 +4,8 @@ Stand in front of a camera and hold still. A referee finds everyone in
 frame, tracks them, measures how much of each body changes every tenth of a
 second, and calls out anyone who moves while the light is red. It plays in a
 browser tab on your own machine, and the same rules run as a Python engine
-over a webcam or any video file.
+over a webcam or any video file — the playground game made world-famous by
+Squid Game.
 
 **[Play it in your browser](https://safdar-hussain1.github.io/red-light-green-light-cv/)** —
 no install, no upload, nothing recorded.
@@ -37,7 +38,7 @@ crossed boxes labelled OUT are players who already moved.*
 - **Browser/Python parity, bit for bit.** The scoring kernel in the tab and
   the one in Python produce identical numbers on shared golden 96 × 96
   window fixtures. Exact equality, not a tolerance.
-- **236 tests** (234 without the two slow ones), and six load-bearing claims
+- **235 tests** (233 without the two slow ones), and six load-bearing claims
   checked by mutating the mechanism behind each one: **6 of 6 mutations were
   caught** by tests that already existed.
 
@@ -367,7 +368,7 @@ docs/DESIGN.md      the design card: pipeline contracts, judge math,
 notebooks/          judge_design.ipynb — how the judge was arrived at
 reports/            benchmark_results.json and the committed figures
 scripts/            figure rendering, weight fetching, site verification
-tests/              236 tests, including browser/Python parity and framing
+tests/              235 tests, including browser/Python parity and framing
 data/, models/      ground-truth footage and the YOLO11n weights
 ```
 
