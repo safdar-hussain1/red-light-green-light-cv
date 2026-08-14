@@ -296,7 +296,7 @@ def test_two_builds_are_byte_identical(tmp_path):
     export.build_site(str(second))
 
     assert first.read_bytes() == second.read_bytes(), (
-        "build_site is not deterministic; every rebuild would churn the committed page"
+        "build_site is not deterministic; every build would churn the committed page"
     )
 
 
@@ -304,7 +304,7 @@ def test_committed_page_is_up_to_date(tmp_path):
     """`docs/index.html` in the repository matches what the build produces now.
 
     The published arena is a build artefact that is committed on purpose, so
-    a visitor gets the current page. If this fails, rebuild it.
+    a visitor gets the current page. If this fails, build it again.
     """
     committed = REPO_ROOT / "docs" / "index.html"
     assert committed.exists(), "docs/index.html should be committed alongside its sources"

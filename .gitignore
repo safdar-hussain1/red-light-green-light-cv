@@ -7,4 +7,5 @@ __pycache__/
 .superpowers/
 .DS_Store
 reports/tmp/
+reports/site/
 site/node_modules/
