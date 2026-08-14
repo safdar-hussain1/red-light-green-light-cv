@@ -154,6 +154,7 @@
 
           var exact = 0;
           fixtures.cases.forEach(function (c) {
+            checks += 1;
             var score = diffScoreWindow(decode(c.prev), decode(c.cur), c.dt);
             if (score === c.expected) {
               exact += 1;
@@ -261,10 +262,15 @@
             })
           );
 
+          // `checks` counts every check attempted — including one increment
+          // per fixture, win or lose — so the denominator below is fixed at
+          // build time and does not shrink when something fails. `exact` is
+          // still tracked separately only to drive the `all_fixtures_exact`
+          // check above; it must never appear in the totals below.
           document.title =
             failures.length === 0
-              ? "SELFTEST PASS n=" + (exact + checks)
-              : "SELFTEST FAIL " + failures.length + " of " + (exact + checks) +
+              ? "SELFTEST PASS n=" + checks
+              : "SELFTEST FAIL " + failures.length + " of " + checks +
                 ": " + failures.slice(0, 3).join(" | ");
         } catch (err) {
           document.title = "SELFTEST FAIL threw: " + (err && err.message ? err.message : err);
