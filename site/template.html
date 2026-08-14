@@ -161,6 +161,8 @@
                 <video id="cam" playsinline muted autoplay></video>
                 <div class="overlay" id="overlay"></div>
                 <div class="flash" id="flash"></div>
+                <div class="lights-out" id="lightsOut" data-on="false"></div>
+                <canvas class="fx" id="fx" aria-hidden="true"></canvas>
 
                 <div class="stage-idle" id="stageIdle">
                   <h3>Ready when you are</h3>
@@ -180,9 +182,11 @@
                 <div class="why-card" id="whyCard"></div>
 
                 <div class="endcard" id="endCard" data-outcome="VICTORY">
-                  <div>
+                  <div class="endcard-inner">
+                    <p class="endcard-eyebrow" id="endEyebrow">The clock ran out</p>
                     <h3 id="endTitle">Victory</h3>
-                    <p id="endDetail"></p>
+                    <p class="endcard-score" id="endScore"></p>
+                    <p class="endcard-detail" id="endDetail"></p>
                     <div class="cta-row" style="justify-content: center">
                       <button class="btn btn-play" id="btnAgain" type="button">
                         Play again

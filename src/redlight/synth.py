@@ -3,11 +3,25 @@
 `chant.json` holds the melody as data — `{"bpm": ..., "notes": [[midi,
 beats], ...]}` — so it can be baked into the browser build (Task 11) as the
 same source of truth, without either renderer depending on the other.
-Everything here is pure arithmetic on that data: a sine oscillator per
-note, shaped by a short attack / decay / sustain / release envelope so
-notes don't click at their edges, laid back-to-back on the chant's own
-clock. No randomness and no wall-clock reads mean the same input always
-produces the same bytes.
+Everything here is pure arithmetic on that data: three sine oscillators per
+note, shaped by an attack / decay / sustain / release envelope so notes
+don't click at their edges, laid back-to-back on the chant's own clock. No
+randomness and no wall-clock reads mean the same input always produces the
+same bytes.
+
+**The tune is written here, not borrowed.** It is an original phrase in A
+minor pentatonic — A C D E G, the five notes almost every playground taunt
+in the world is built from — set at a walking 78 bpm. It climbs in two
+sing-song steps, hangs a whole beat on its highest note, and then drops an
+octave in two clipped quarter-beats. That last pair is the mechanic, not a
+flourish: the chant is the clock, and a player standing in front of the
+camera hears the phrase run out of road before the light turns.
+
+The voicing is what makes it read as a child singing in an empty room
+rather than a test tone. Each note is a fundamental, a second voice eight
+cents flat — slow enough to beat rather than sound out of tune — and a
+quiet octave above for a music-box edge, under a soft attack and a long
+release so the tail of every note hangs in its own slot.
 
 The buzzer is a short square-wave burst built the same way, for the
 "you're out" cue.
@@ -87,18 +101,39 @@ def _envelope(
     return env[:n_samples]
 
 
-def _sine_note(midi: int, duration_s: float, sample_rate: int) -> np.ndarray:
-    """One enveloped sine-wave note, `duration_s` long."""
+DETUNE_SEMITONES = -0.08
+"""How flat the second voice sits, in semitones (eight cents).
+
+Small enough to hear as one note rather than two, large enough that the two
+voices drift in and out of phase about once a second — which is the whole
+reason it is here. A single sine is a test tone; two that beat slowly
+against each other is somebody singing slightly out of tune with herself.
+"""
+
+SHIMMER_GAIN = 0.16
+"""Level of the octave above the fundamental — a music-box edge, no more."""
+
+
+def _voiced_note(midi: int, duration_s: float, sample_rate: int) -> np.ndarray:
+    """One enveloped note: fundamental, flat second voice, octave shimmer."""
     n = max(int(round(duration_s * sample_rate)), 1)
     t = np.arange(n) / sample_rate
-    tone = np.sin(2.0 * np.pi * midi_to_hz(midi) * t)
+
+    def sine(note: float) -> np.ndarray:
+        return np.sin(2.0 * np.pi * midi_to_hz(note) * t)
+
+    tone = sine(midi) + 0.55 * sine(midi + DETUNE_SEMITONES) + SHIMMER_GAIN * sine(midi + 12)
+
+    # Soft in, long out. The release is the largest stage on purpose: a note
+    # that decays across most of its own slot leaves air between the
+    # syllables, which is what a chant sung across a courtyard sounds like.
     env = _envelope(
         n,
         sample_rate,
-        attack_s=min(0.01, duration_s * 0.25),
-        decay_s=min(0.02, duration_s * 0.25),
-        sustain_level=0.7,
-        release_s=min(0.05, duration_s * 0.4),
+        attack_s=min(0.045, duration_s * 0.22),
+        decay_s=min(0.09, duration_s * 0.24),
+        sustain_level=0.55,
+        release_s=min(0.26, duration_s * 0.5),
     )
     return tone * env
 
@@ -107,7 +142,7 @@ def _synthesize_chant(chant: dict, sample_rate: int) -> np.ndarray:
     """Render every note of a chant back-to-back at the chant's own tempo."""
     beat_s = 60.0 / chant["bpm"]
     notes = [
-        _sine_note(midi, beats * beat_s, sample_rate) for midi, beats in chant["notes"]
+        _voiced_note(midi, beats * beat_s, sample_rate) for midi, beats in chant["notes"]
     ]
     return np.concatenate(notes) if notes else np.zeros(0, dtype=np.float64)
 

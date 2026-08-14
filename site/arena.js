@@ -101,6 +101,24 @@ function buildReplaySchedule(duration) {
   }));
 }
 
+/** How long the arena holds its cold, frozen look at a green-to-red snap. */
+const FREEZE_MS = 260;
+
+/**
+ * True when the visitor has asked the platform for less movement.
+ *
+ * The stylesheet flattens every transition and animation on its own. This is
+ * for the handful of effects CSS cannot reason about — a full-frame white
+ * flash, a burst of thrown paper, a box breaking into shards — which are not
+ * worth flattening, only worth skipping.
+ */
+function lessMotion() {
+  return (
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
+
 /* ------------------------------------------------------------------ theme */
 
 /**
@@ -306,6 +324,8 @@ class Arena {
     this.video = el("cam");
     this.overlay = el("overlay");
     this.flash = el("flash");
+    this.lightsOut = el("lightsOut");
+    this.fx = el("fx");
     this.idle = el("stageIdle");
     this.whyCard = el("whyCard");
     this.endCard = el("endCard");
@@ -342,6 +362,9 @@ class Arena {
     this.traces = new Map();
     this.rows = new Map();
     this.replayTimer = null;
+    /** Cancels a confetti burst still in flight, or null. */
+    this.stopConfetti = null;
+    this.freezeTimer = null;
 
     const canvas = document.createElement("canvas");
     canvas.width = 96;
@@ -358,8 +381,58 @@ class Arena {
     if (this.status) this.status.textContent = text;
   }
 
+  /**
+   * Restart a one-shot effect on an element, tagged with what kind it is.
+   *
+   * The reflow between the two writes is load-bearing: without it a second
+   * call while the animation is still running does nothing, and the case
+   * that matters — two players called out a few frames apart — is exactly
+   * that case.
+   */
+  fire(node, kind) {
+    if (!node) return;
+    node.dataset.on = "false";
+    node.dataset.kind = kind;
+    void node.offsetWidth;
+    node.dataset.on = "true";
+  }
+
+  /**
+   * The green-to-red snap, felt rather than read.
+   *
+   * A camera flash and a quarter of a second where the stage goes cold and
+   * stops looking like a live picture. This is the one moment in a match a
+   * player has to react to, so it is the one moment the page interrupts
+   * itself. Skipped outright under reduced motion — a full-frame flash is
+   * precisely the effect that setting exists to turn off.
+   */
+  snapToRed() {
+    if (lessMotion()) return;
+    this.fire(this.flash, "snap");
+    this.stage.dataset.freeze = "true";
+    if (this.freezeTimer !== null) window.clearTimeout(this.freezeTimer);
+    this.freezeTimer = window.setTimeout(() => {
+      delete this.stage.dataset.freeze;
+      this.freezeTimer = null;
+    }, FREEZE_MS);
+  }
+
+  /** Put the stage back to a state a new match can start from. */
+  resetStage() {
+    delete this.stage.dataset.outcome;
+    delete this.stage.dataset.freeze;
+    if (this.lightsOut) this.lightsOut.dataset.on = "false";
+    if (this.flash) this.flash.dataset.on = "false";
+    if (this.stopConfetti) {
+      this.stopConfetti();
+      this.stopConfetti = null;
+    }
+  }
+
   setPhase(phase) {
+    const previous = this.stage.dataset.phase;
     this.stage.dataset.phase = phase;
+    if (previous === "GREEN" && phase === "RED") this.snapToRed();
     const pill = el("phasePill");
     if (pill) pill.dataset.phase = phase;
     const word = el("phaseWord");
@@ -391,6 +464,7 @@ class Arena {
     const button = el("btnPlay");
     if (button) button.disabled = true;
     this.stopReplay();
+    this.resetStage();
     this.setStatus("Asking for the camera.");
 
     try {
@@ -665,13 +739,53 @@ class Arena {
     }
   }
 
+  /**
+   * The moment a player stops being a player.
+   *
+   * Three things land together, because one call is one event and it should
+   * not arrive in instalments: the box they were scored through breaks into
+   * shards and goes grey, their meter falls to the floor, and a low thump
+   * marks it hitting. The buzzer says *what* happened; this says how much it
+   * cost. Only the meter and the thump survive reduced motion — a number
+   * dropping is information, six shards flying apart is not.
+   */
+  breakPlayer(trackId) {
+    this.safeAudio(() => this.chant.thud());
+
+    const row = this.rows.get(trackId);
+    if (row) {
+      row.dataset.dropped = "true";
+      window.setTimeout(() => {
+        if (row.isConnected) delete row.dataset.dropped;
+      }, 700);
+    }
+
+    if (lessMotion()) return;
+    const box = this.overlay.querySelector('[data-track="' + trackId + '"]');
+    if (!box || box.querySelector(".shard")) return;
+    box.dataset.broke = "true";
+    const shards = [];
+    for (let i = 0; i < 6; i += 1) {
+      const shard = document.createElement("span");
+      shard.className = "shard";
+      shard.style.setProperty("--throw", i * 60 + 12 + "deg");
+      shard.style.setProperty("--wait", (i % 3) * 45 + "ms");
+      box.appendChild(shard);
+      shards.push(shard);
+    }
+    // The shards are litter once they have landed, and `renderBoxes` only
+    // ever removes whole boxes — a player who stays in frame after being
+    // called out would otherwise keep six spent spans forever.
+    window.setTimeout(() => {
+      for (const shard of shards) shard.remove();
+    }, 900);
+  }
+
   eliminate(event, now) {
     this.safeAudio(() => this.chant.buzz());
-    this.flash.dataset.on = "false";
-    // Reflow between the two writes, or the animation does not restart when
-    // two players go out within a few frames of each other.
-    void this.flash.offsetWidth;
-    this.flash.dataset.on = "true";
+    this.fire(this.flash, "call");
+    if (this.doll) this.doll.snap();
+    this.breakPlayer(event.trackId);
 
     const trace = this.traces.get(event.trackId) || [];
     const reason =
@@ -708,16 +822,88 @@ class Arena {
     const button = el("btnPlay");
     if (button) button.disabled = false;
     const survivors = this.game ? this.game.aliveCount : 0;
-    this.endCard.dataset.show = "true";
-    this.endCard.dataset.outcome = phase;
-    el("endTitle").textContent = phase === "VICTORY" ? "Victory" : "Wipeout";
-    el("endDetail").textContent =
+    const registered = this.game ? this.game.players.size : 0;
+    this.showEnd(
+      phase,
+      survivors,
+      registered,
       phase === "VICTORY"
         ? survivors === 1
           ? "One player stood still long enough. The clock ran out first."
           : survivors + " players stood still long enough. The clock ran out first."
-        : "Every registered player was called out before the clock ran down.";
+        : "Every registered player was called out before the clock ran down."
+    );
     Probe.note("end:" + phase);
+  }
+
+  /**
+   * The end card, and the moment around it.
+   *
+   * The card leads with the count rather than the word: how many people were
+   * left standing out of how many started is the result, and "Victory" is
+   * only the name for it. Underneath, the arena reacts once — paper thrown
+   * from the corners and a small bow for a win, the lights swept out for a
+   * wipeout — and then holds completely still, because a card somebody is
+   * reading should not be moving.
+   *
+   * @param {string} phase "VICTORY" or "WIPEOUT".
+   * @param {number} survivors Players still standing at the final whistle.
+   * @param {number} registered Players the referee started the match with.
+   * @param {string} detail One sentence of plain English under the count.
+   */
+  showEnd(phase, survivors, registered, detail) {
+    const won = phase === "VICTORY";
+    this.stage.dataset.outcome = phase;
+    this.endCard.dataset.show = "true";
+    this.endCard.dataset.outcome = phase;
+
+    // The eyebrow names what ended the match; the count says how it went.
+    // Two lines that both said "nobody is left" would be one line twice.
+    const eyebrow = el("endEyebrow");
+    if (eyebrow) {
+      eyebrow.textContent = won ? "The clock ran out" : "The referee got everyone";
+    }
+    this.setPhaseSub("Match over");
+    el("endTitle").textContent = won ? "Victory" : "Wipeout";
+    const score = el("endScore");
+    if (score) {
+      score.innerHTML =
+        '<span class="num">' + survivors + "</span>" +
+        '<span class="of">of ' + registered + " still standing</span>";
+    }
+    el("endDetail").textContent = detail;
+
+    if (won) {
+      this.celebrate();
+      if (this.doll) this.doll.bow();
+    } else if (this.lightsOut) {
+      this.lightsOut.dataset.on = "true";
+    }
+  }
+
+  /**
+   * Throw paper across the stage, in the arena's own colours.
+   *
+   * The palette is read live rather than hard-coded, so a burst under the
+   * night theme is made of the night theme's green, violet and ink — three
+   * colours that are guaranteed to read against whichever background the
+   * visitor is on. The fourth is the referee's own paint, the ochre of her
+   * dress, which does not change with the theme and should not change here.
+   */
+  celebrate() {
+    if (lessMotion() || !this.fx || typeof burstConfetti !== "function") return;
+    if (this.stopConfetti) this.stopConfetti();
+    const paint = window.getComputedStyle(document.documentElement);
+    const token = (name, fallback) =>
+      paint.getPropertyValue(name).trim() || fallback;
+    this.stopConfetti = burstConfetti(this.fx, {
+      colors: [
+        token("--green-lit", "#17a34a"),
+        token("--accent", "#4a3aa7"),
+        "#d98324",
+        token("--ink", "#14201d"),
+      ],
+    });
   }
 
   /* -------------------------------------------------------------- render */
@@ -1010,6 +1196,7 @@ class Arena {
       if (button) button.disabled = false;
     }
     this.stage.dataset.live = "false";
+    this.resetStage();
     this.live = true;
     const demo = this.data.benchmark.demo_match;
     const grace = demo.config.grace_s;
@@ -1089,13 +1276,15 @@ class Arena {
         this.setPhase("COUNTDOWN");
         this.setPhaseSub("Countdown");
       } else if (matchT >= duration) {
-        this.setPhase(demo.outcome === "victory" ? "VICTORY" : "WIPEOUT");
-        this.endCard.dataset.show = "true";
-        this.endCard.dataset.outcome = demo.outcome === "victory" ? "VICTORY" : "WIPEOUT";
-        el("endTitle").textContent = demo.outcome === "victory" ? "Victory" : "Wipeout";
-        el("endDetail").textContent =
-          demo.survivors + " of " + demo.players + " players were still standing when the "
-          + "clock ran out. Recorded by the Python engine on the benchmark footage.";
+        const outcome = demo.outcome === "victory" ? "VICTORY" : "WIPEOUT";
+        this.setPhase(outcome);
+        this.showEnd(
+          outcome,
+          demo.survivors,
+          demo.players,
+          "Recorded by the Python engine on the benchmark footage — not staged, "
+            + "and reproducible from the README's install steps."
+        );
         this.replayTimer = null;
         Probe.note("replay-end");
         return;
@@ -1218,6 +1407,7 @@ function initArena() {
   if (again) {
     again.addEventListener("click", () => {
       arena.stopReplay();
+      arena.resetStage();
       arena.live = false;
       if (window.rlHeroDemo) window.rlHeroDemo.resume();
       arena.endCard.dataset.show = "false";
