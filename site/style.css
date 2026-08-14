@@ -1,0 +1,162 @@
+/*
+ * The arena's base layer: page frame, type, and the regions the interactive
+ * build fills in. Everything here is structural and safe to extend — the
+ * playfield, doll, and results widgets bring their own rules on top.
+ *
+ * Colours run through custom properties so the red/green light can be driven
+ * from one place. The light is the loudest thing on the page by design: a
+ * player has to read it from across a room, in peripheral vision, while
+ * concentrating on holding still.
+ */
+
+:root {
+  --bg: #0b0d10;
+  --panel: #14181d;
+  --edge: #262d35;
+  --ink: #e8edf2;
+  --ink-dim: #93a1b0;
+  --green: #23c552;
+  --red: #f0342e;
+  --accent: #f5c518;
+  --radius: 12px;
+  --measure: 68ch;
+  --pad: clamp(1rem, 3vw, 2rem);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  padding: var(--pad);
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.2;
+  text-wrap: balance;
+  margin: 0 0 0.4em;
+}
+
+h1 {
+  font-size: clamp(1.7rem, 4.5vw, 2.6rem);
+  letter-spacing: -0.02em;
+}
+
+h2 {
+  font-size: clamp(1.25rem, 3vw, 1.6rem);
+}
+
+p {
+  margin: 0 0 1em;
+  max-width: var(--measure);
+}
+
+a {
+  color: var(--accent);
+}
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+}
+
+.wrap {
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.lede {
+  color: var(--ink-dim);
+  font-size: 1.05rem;
+  max-width: var(--measure);
+}
+
+header.masthead {
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--edge);
+  margin-bottom: 2rem;
+}
+
+section {
+  margin: 0 0 2.5rem;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius);
+  padding: var(--pad);
+}
+
+/* The playfield. Task-built widgets mount inside; this reserves the space so
+   the page does not reflow the moment the camera comes up. */
+#arena {
+  display: grid;
+  gap: 1rem;
+}
+
+#arena .stage {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  width: 100%;
+  background: #05070a;
+  border: 1px solid var(--edge);
+  border-radius: var(--radius);
+  display: grid;
+  place-items: center;
+  color: var(--ink-dim);
+  overflow: hidden;
+}
+
+#arena .stage[data-phase="GREEN"] {
+  box-shadow: inset 0 0 0 3px var(--green);
+}
+
+#arena .stage[data-phase="RED"] {
+  box-shadow: inset 0 0 0 3px var(--red);
+}
+
+#results {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.chart-frame {
+  overflow-x: auto;
+}
+
+.note {
+  color: var(--ink-dim);
+  font-size: 0.9rem;
+}
+
+footer {
+  border-top: 1px solid var(--edge);
+  padding-top: 1.25rem;
+  color: var(--ink-dim);
+  font-size: 0.9rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}

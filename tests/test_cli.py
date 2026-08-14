@@ -188,18 +188,28 @@ class TestBenchmark:
         assert results["classifiers"]
 
 
-class TestLazyModulesNotYetAvailable:
-    """`export.py` (Task 11) doesn't exist yet. This pins today's
-    graceful-degradation behavior; once that module lands, this test should
-    be replaced with a real one exercising it.
-    """
+class TestBuildSite:
+    """`redlight build-site` writes the single-file arena."""
 
-    def test_build_site_reports_actionable_error_and_exits_one(self, capsys):
-        code = cli.main(["build-site"])
+    def test_writes_the_page_to_the_requested_path(self, tmp_path, capsys):
+        out = tmp_path / "arena.html"
+        code = cli.main(["build-site", "--out", str(out)])
+
+        assert code == 0
+        assert out.exists()
+        assert "window.RL_DATA" in out.read_text(encoding="utf-8")
+        assert str(out) in capsys.readouterr().out
+
+    def test_missing_inputs_report_one_readable_line(self, tmp_path, capsys, monkeypatch):
+        """A checkout without the benchmark results gets a sentence, not a traceback."""
+        from redlight import export
+
+        monkeypatch.setattr(export, "BENCHMARK_PATH", tmp_path / "absent.json")
+        code = cli.main(["build-site", "--out", str(tmp_path / "out.html")])
 
         assert code == 1
         err = capsys.readouterr().err
-        assert "not available" in err
+        assert "error:" in err
         assert "Traceback" not in err
 
 

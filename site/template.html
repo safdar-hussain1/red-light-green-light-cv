@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Red Light, Green Light — a computer-vision referee</title>
+    <meta
+      name="description"
+      content="Play Red Light, Green Light against a computer-vision referee in your browser. The same judge the Python engine runs, proven by shared fixtures."
+    />
+
+    <!--
+      Build markers. `redlight.export.build_site` replaces each of these with
+      the inlined contents of `site/*.css` and `site/*.js`, so the published
+      page is one file with no sidecar requests. Adding a stylesheet or a
+      script to `site/` is enough to get it inlined — the build discovers
+      them, and only the load order is spelled out in `export.JS_ORDER`.
+    -->
+    <!--__STYLES__-->
+
+    <!--
+      Chart.js is pinned to an exact version and to an exact set of bytes.
+      The integrity hash was computed from the file this URL actually served;
+      if the CDN ever serves anything else, the browser refuses to run it
+      rather than executing whatever arrived.
+    -->
+    <script
+      src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"
+      integrity="sha384-9nhczxUqK87bcKHh20fSQcTGD4qq5GhayNYSYWqwBkINBhOfQLg/P5HG5lF1urn4"
+      crossorigin="anonymous"
+      defer
+    ></script>
+
+    <!--
+      The one documented exception to that rule: MediaPipe tasks-vision.
+
+      Pose detection is loaded only if a visitor opts into their camera, and
+      it is loaded at run time from
+      cdn.jsdelivr.net/npm/@mediapipe/tasks-vision — pinned to an exact
+      version, never a floating tag. It carries no integrity hash, and it
+      cannot: the loader resolves its own wasm binary and model URLs at run
+      time from a base path it is handed, so there is no fixed set of bytes
+      known at build time to hash. Subresource integrity has nothing to
+      attach to for a wasm module fetched that way.
+
+      What is done instead: the version is pinned so the URL cannot drift,
+      the fetch happens only after an explicit opt-in, and nothing on this
+      page depends on it — the judge, the game rules, and every published
+      number below run without it.
+    -->
+
+    <script>
+      // Everything the page runs on: the constants the desktop engine was
+      // tuned with, the benchmark results, the chant, and the golden judge
+      // fixtures. Baked in at build time so the page needs no network.
+      window.RL_DATA = /*__DATA__*/;
+    </script>
+  </head>
+
+  <body>
+    <div class="wrap">
+      <header class="masthead">
+        <h1>Red Light, Green Light</h1>
+        <p class="lede">
+          A computer-vision referee that watches you through a webcam and calls
+          you out when you move. The judge running in this tab is the same one
+          the Python engine runs — held to it by shared golden fixtures, so the
+          browser and the desktop reach the same verdict on the same frames.
+        </p>
+      </header>
+
+      <main>
+        <section id="arena" aria-label="Play area">
+          <h2>The arena</h2>
+          <div class="stage" data-phase="LOBBY">
+            <p class="note">The playfield mounts here.</p>
+          </div>
+        </section>
+
+        <section id="results" aria-label="Measured results">
+          <h2>What it measures</h2>
+          <div class="panel">
+            <p class="note">
+              Benchmark figures, threshold selection, and the sweeps mount here.
+            </p>
+          </div>
+        </section>
+      </main>
+
+      <footer>
+        <p>
+          Built by Safdar Hussain.
+          <a href="https://github.com/safdar-hussain1/red-light-green-light-cv"
+            >Source and benchmarks on GitHub</a
+          >.
+        </p>
+      </footer>
+    </div>
+
+    <!--__SCRIPTS__-->
+
+    <script>
+      /**
+       * `?selftest=1` — prove, in this browser, that the port still agrees.
+       *
+       * Parity is checked in CI under node, but CI is not the environment a
+       * visitor plays in. This runs the same golden fixtures and a scripted
+       * match here, in whatever engine actually loaded the page, and reports
+       * through `document.title` so a headless browser can read the verdict
+       * without a screenshot or a console scrape.
+       *
+       * The fixture comparison is exact equality, not a tolerance. The score
+       * is an integer count divided by 9216 and then by dt, and IEEE-754
+       * division is exactly rounded, so anything less than an exact match is
+       * a real disagreement.
+       */
+      (function () {
+        var params = new URLSearchParams(window.location.search);
+        if (params.get("selftest") !== "1") return;
+
+        var failures = [];
+        var checks = 0;
+
+        function check(name, condition) {
+          checks += 1;
+          if (!condition) failures.push(name);
+        }
+
+        function decode(b64) {
+          var binary = atob(b64);
+          var bytes = new Uint8Array(binary.length);
+          for (var i = 0; i < binary.length; i += 1) {
+            bytes[i] = binary.charCodeAt(i);
+          }
+          return bytes;
+        }
+
+        function threw(fn) {
+          try {
+            fn();
+            return false;
+          } catch (e) {
+            return true;
+          }
+        }
+
+        try {
+          // ---- Every golden fixture, scored here, compared exactly. ----
+          var fixtures = window.RL_DATA.fixtures;
+          check("fixtures_present", fixtures && fixtures.cases.length >= 24);
+          check("fixture_window_96", fixtures.window === 96);
+          check("fixture_delta_25", fixtures.diff_pixel_delta === 25);
+
+          var exact = 0;
+          fixtures.cases.forEach(function (c) {
+            var score = diffScoreWindow(decode(c.prev), decode(c.cur), c.dt);
+            if (score === c.expected) {
+              exact += 1;
+            } else {
+              failures.push(
+                "fixture " + c.name + ": got " + score + ", expected " + c.expected
+              );
+            }
+          });
+          check("all_fixtures_exact", exact === fixtures.cases.length);
+
+          // ---- Bad input is refused rather than quietly scored. ----
+          var ok = new Uint8Array(9216);
+          check("rejects_zero_dt", threw(function () { diffScoreWindow(ok, ok, 0); }));
+          check(
+            "rejects_short_window",
+            threw(function () { diffScoreWindow(new Uint8Array(9215), ok, 0.1); })
+          );
+
+          // ---- A scripted match on a fake clock. ----
+          // phaseMinS === phaseMaxS pins the schedule exactly, so every
+          // assertion below is about the rules and not about the PRNG.
+          var game = new Game({
+            seed: 1729,
+            countdownS: 1.0,
+            durationS: 100.0,
+            phaseMinS: 1.0,
+            phaseMaxS: 1.0,
+            graceS: 0.5,
+          });
+
+          check("starts_in_lobby", game.phase === "LOBBY");
+          var started = game.start(0.0, [1, 2]);
+          check("start_opens_countdown", game.phase === "COUNTDOWN");
+          check(
+            "start_emits_phase_change",
+            started.length === 1 && started[0].type === "PHASE_CHANGED"
+          );
+          check("countdown_is_not_a_match", game.update(0.5).length === 0);
+
+          check("countdown_ends_green", game.update(1.0)[0].phase === "GREEN");
+          check("green_forgives_motion", game.update(1.2, [1]).length === 0);
+          check("green_is_never_armed", game.armed(1.2) === false);
+
+          check("green_flips_to_red", game.update(2.0)[0].phase === "RED");
+
+          // Inside the grace window: a player mid-stride is not punished.
+          check("grace_not_armed", game.armed(2.4) === false);
+          check("grace_forgives", game.update(2.4, [1]).length === 0);
+
+          // Past it: the same motion is an elimination.
+          check("armed_after_grace", game.armed(2.6) === true);
+          var caught = game.update(2.6, [1]);
+          check(
+            "armed_eliminates",
+            caught.length === 1 &&
+              caught[0].type === "PLAYER_ELIMINATED" &&
+              caught[0].trackId === 1 &&
+              caught[0].reason === "moved"
+          );
+
+          // Registration: only players who signed up can be called out, and
+          // nobody is eliminated twice.
+          check("ignores_unregistered", game.update(2.7, [999]).length === 0);
+          check("ignores_already_out", game.update(2.7, [1]).length === 0);
+          check("roster_is_closed", game.players.has(999) === false);
+          check("alive_count_tracks", game.aliveCount === 1);
+
+          // A lost track goes out under either light.
+          var lost = game.update(2.8, null, [2]);
+          check(
+            "missing_leaves_arena",
+            lost.length >= 1 &&
+              lost[0].type === "PLAYER_ELIMINATED" &&
+              lost[0].reason === "left_arena"
+          );
+          check("empty_arena_is_wipeout", game.phase === "WIPEOUT");
+          check("finished_ignores_updates", game.update(9.0, [1]).length === 0);
+
+          // A late update replays every boundary it skipped, in order.
+          var late = new Game({
+            seed: 7,
+            countdownS: 1.0,
+            durationS: 1000.0,
+            phaseMinS: 1.0,
+            phaseMaxS: 1.0,
+            graceS: 0.6,
+          });
+          late.start(0.0, [1]);
+          late.update(1.0);
+          var flips = late.update(4.5);
+          check("catch_up_replays_boundaries", flips.length === 3);
+          check(
+            "catch_up_alternates",
+            flips[0].phase === "RED" &&
+              flips[1].phase === "GREEN" &&
+              flips[2].phase === "RED"
+          );
+
+          // A zero-length phase would spin that loop forever; it is refused.
+          check(
+            "rejects_zero_length_phase",
+            threw(function () {
+              new Game({ phaseMinS: 0, phaseMaxS: 0 });
+            })
+          );
+
+          document.title =
+            failures.length === 0
+              ? "SELFTEST PASS n=" + (exact + checks)
+              : "SELFTEST FAIL " + failures.length + " of " + (exact + checks) +
+                ": " + failures.slice(0, 3).join(" | ");
+        } catch (err) {
+          document.title = "SELFTEST FAIL threw: " + (err && err.message ? err.message : err);
+        }
+      })();
+    </script>
+  </body>
+</html>

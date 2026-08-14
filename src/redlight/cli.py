@@ -10,12 +10,11 @@ it, so a future flag added in the wrong place fails loudly instead of
 quietly shadowing a subcommand's own.
 
 `benchmark` and `build-site` import their backing modules lazily, inside
-their handlers rather than at the top of this file: `benchmark.py` and
-`export.py` land in later work, and importing either at module load time
-would break every other subcommand (including `--help`) until then. The
-lazy import also means a user who never runs those two subcommands is
-never asked to pay for whatever those modules pull in (matplotlib,
-scikit-learn, ...).
+their handlers rather than at the top of this file, so a user who never
+runs those two subcommands is never asked to pay for whatever they pull in
+(matplotlib, scikit-learn, ...) — and a missing analysis extra degrades to
+one readable line on those subcommands instead of breaking every other one,
+`--help` included.
 """
 
 from __future__ import annotations
@@ -254,13 +253,22 @@ def _cmd_build_site(args: argparse.Namespace) -> int:
         from . import export
     except ImportError as exc:
         print(
-            "error: build-site module not available yet "
-            f"(redlight.export: {exc})",
+            f"error: cannot build the site (redlight.export: {exc})",
             file=sys.stderr,
         )
         return 1
 
-    export.build_site(args.out)
+    try:
+        written = export.build_site(args.out)
+    except (FileNotFoundError, KeyError, ValueError) as exc:
+        # The build reads the page template and the published benchmark
+        # results from the source tree. Missing either is a normal thing to
+        # hit (an installed package, or a checkout that has never run the
+        # benchmark), so it earns a readable line rather than a traceback.
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"wrote {written}")
     return 0
 
 
