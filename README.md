@@ -13,7 +13,7 @@ no install, no upload, nothing recorded.
 crossed box and an OUT label marking the players already
 called](reports/figures/hud_red_light.png)
 
-*Red light on the ground-truth footage. Every player is boxed and tracked;
+*Red light on the ground-truth footage. Every tracked player is boxed;
 crossed boxes labelled OUT are players who already moved.*
 
 ---

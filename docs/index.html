@@ -2498,7 +2498,10 @@ footer p {
                 YOLO11n or weights-free HOG detection, and writes the benchmark
                 every number on this page comes from.
               </p>
-              <pre><code>pip install redlight
+              <pre><code>git clone https://github.com/safdar-hussain1/red-light-green-light-cv.git
+cd red-light-green-light-cv
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e ".[audio,analysis,dev]"
 
 # play against your webcam
 redlight play --source 0
@@ -4091,13 +4094,25 @@ class Arena {
     const pair = this.sampler.offer(crops, now);
     if (!pair) return [];
 
+    // Same gate the desktop engine applies in `app.run`: a pair is only fed
+    // to the judge once the sampler has released it *and* the current red
+    // light is armed. Grace exists so a player mid-stride is not punished
+    // for momentum they had before the light turned — feeding the judge
+    // during grace would let the EMA and streak it builds there survive
+    // into the armed window and trigger a call the instant grace ends,
+    // which defeats the point of having grace at all.
+    const armed = this.game ? this.game.armed(now) : false;
+
     const violations = [];
     for (const key of Object.keys(pair.cur)) {
       const previous = pair.prev[key];
       if (!previous) continue;
       const id = Number(key);
+      // Computed unconditionally: the raw diff is cheap, and nothing below
+      // this line about *displaying* a score should depend on whether the
+      // light happens to be armed right now.
       const score = diffScoreWindow(previous, pair.cur[key], pair.dt);
-      if (this.judge.update(id, score)) violations.push(id);
+      if (armed && this.judge.update(id, score)) violations.push(id);
 
       let trace = this.traces.get(id);
       if (!trace) {

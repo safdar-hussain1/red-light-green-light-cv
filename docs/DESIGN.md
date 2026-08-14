@@ -368,7 +368,11 @@ tolerance. That is a fair demand: the score is an integer count divided by
 languages. `MotionJudge`, `FrameSampler` and the game rules are pinned the
 same way, with `phase_min_s == phase_max_s` so the two PRNGs drop out of the
 comparison. The shipped page can re-run the whole fixture set in the
-visitor's own browser via `?selftest=1`.
+visitor's own browser via `?selftest=1`. Both sides also agree on *when* a
+sampled pair reaches the judge at all: `app.run` only calls `judge.update`
+once `game.armed(ts)` is true, and `site/arena.js` gates its call on
+`game.armed(now)` the same way, so a player's EMA and streak cannot build up
+during grace and then trigger a call the instant the light arms.
 
 **Not proven, by construction.** How a camera frame *becomes* a 96 x 96
 window. Python clamps the box, resamples with OpenCV's INTER_AREA and

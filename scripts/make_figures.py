@@ -178,7 +178,7 @@ def build_roc_curves(samples, out_path: Path = FIGURES_DIR / "roc_curves.png") -
             tpr,
             linewidth=2,
             linestyle=linestyle,
-            label=f"{_METRIC_LABELS[metric]} (AUC {auc:.3f})",
+            label=f"{_METRIC_LABELS[metric]} (AUC {auc:.4f})",
         )
 
     ax.plot([0, 1], [0, 1], linestyle="--", color="0.6", linewidth=1, label="chance")

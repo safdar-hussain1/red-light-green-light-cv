@@ -648,7 +648,10 @@
                 YOLO11n or weights-free HOG detection, and writes the benchmark
                 every number on this page comes from.
               </p>
-              <pre><code>pip install redlight
+              <pre><code>git clone https://github.com/safdar-hussain1/red-light-green-light-cv.git
+cd red-light-green-light-cv
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e ".[audio,analysis,dev]"
 
 # play against your webcam
 redlight play --source 0
