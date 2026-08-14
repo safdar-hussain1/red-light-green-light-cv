@@ -169,7 +169,7 @@ def _draw_players(
     config: GameConfig,
     now: float,
 ) -> None:
-    threshold = config.threshold if config.metric == "flow" else config.diff_threshold
+    threshold = config.active_threshold
     armed = game.armed(now)
 
     for track in tracks:

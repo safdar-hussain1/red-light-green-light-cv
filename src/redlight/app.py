@@ -24,7 +24,7 @@ from redlight.config import ConfigError, GameConfig
 from redlight.detection import Detection, make_detector
 from redlight.game import EventType, Game, Phase
 from redlight.hud import Hud
-from redlight.judge import FrameSampler, MotionJudge, crop_window, diff_score_window, flow_score
+from redlight.judge import FrameSampler, MotionJudge, diff_score, flow_score
 from redlight.sources import FrameSource
 from redlight.tracking import Tracker
 
@@ -33,7 +33,7 @@ _START_KEYS = (ord("s"), ord("S"))
 _WINDOW_NAME = "Red Light, Green Light"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class MatchReport:
     """How a run of the referee ended.
 
@@ -43,6 +43,12 @@ class MatchReport:
     before the game reached either). `eliminations` are in the order they
     happened, as `(track_id, match-relative seconds, reason)`; `reason`
     matches `game.Event.reason`: `"moved"` or `"left_arena"`.
+
+    Fields are keyword-only: this class and the brief that specifies it
+    order them differently (`outcome, players, survivors, eliminations`
+    here vs. `outcome, eliminations, survivors, players` there), so
+    positional construction would silently transpose `players`/`survivors`
+    for anyone going by the brief. Keyword-only makes that impossible.
     """
 
     outcome: str
@@ -107,13 +113,18 @@ def run(
     # two near-identically-stale tracks a match considers lost first —
     # which breaks the promise that a fixed seed on the same footage always
     # plays out the same match. Pinning to one thread makes every run bit
-    # for bit identical, at the cost of not using extra cores.
+    # for bit identical, at the cost of not using extra cores. This is
+    # process-wide OpenCV state, not scoped to this call, so the previous
+    # setting is restored in the `finally` block below rather than left
+    # clamped for whatever else shares the process afterward.
+    previous_num_threads = cv2.getNumThreads()
     cv2.setNumThreads(1)
 
     detector = make_detector(config.detector, config.conf)
     tracker = Tracker(max_misses=config.max_misses)
-    threshold = config.threshold if config.metric == "flow" else config.diff_threshold
-    judge = MotionJudge(threshold=threshold, confirm_frames=config.confirm_frames, smoothing=config.smoothing)
+    judge = MotionJudge(
+        threshold=config.active_threshold, confirm_frames=config.confirm_frames, smoothing=config.smoothing
+    )
     sampler = FrameSampler()
     game = Game(config)
     speaker = Speaker(muted=headless)
@@ -213,6 +224,7 @@ def run(
             writer.release()
         if not headless:
             cv2.destroyAllWindows()
+        cv2.setNumThreads(previous_num_threads)
 
     if game.finished:
         outcome = "victory" if game.phase == Phase.VICTORY else "wipeout"
@@ -228,11 +240,16 @@ def run(
 def _score(
     metric: str, prev_gray: np.ndarray, cur_gray: np.ndarray, box: Detection, dt: float
 ) -> float | None:
-    """One player's motion score for the configured metric, on one sampled pair."""
+    """One player's motion score for the configured metric, on one sampled pair.
+
+    `metric` is trusted, same as the rest of `config` (see `run`'s
+    docstring) — `GameConfig.validate()` is what rejects anything other
+    than `"flow"`/`"diff"`, and that's opt-in, not called here. So this
+    intentionally falls through to `diff_score` for anything that isn't
+    literally `"flow"`, rather than raising: a caller that skipped
+    validation gets the same permissive behavior everywhere else in this
+    function, not a surprise crash specifically here.
+    """
     if metric == "flow":
         return flow_score(prev_gray, cur_gray, box, dt)
-    prev_win = crop_window(prev_gray, box)
-    cur_win = crop_window(cur_gray, box)
-    if prev_win is None or cur_win is None:
-        return None
-    return diff_score_window(prev_win, cur_win, dt)
+    return diff_score(prev_gray, cur_gray, box, dt)

@@ -109,3 +109,16 @@ class GameConfig:
         if violations:
             error_msg = "Configuration errors:\n" + "\n".join(f"  - {v}" for v in violations)
             raise ConfigError(error_msg)
+
+    @property
+    def active_threshold(self) -> float:
+        """The threshold that actually applies, given `metric`.
+
+        `threshold` and `diff_threshold` are on different scales (flow's
+        body-fractions-per-second vs. diff's changed-pixel-fraction), so
+        exactly one of them is ever the live cutoff a judge should compare
+        scores against. Any caller that needs "the" threshold for the
+        configured metric should read this instead of re-deriving the same
+        `metric == "flow"` ternary.
+        """
+        return self.threshold if self.metric == "flow" else self.diff_threshold
