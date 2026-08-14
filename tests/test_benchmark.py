@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 
+import numpy as np
 import pytest
 
 from redlight import __version__, benchmark
@@ -23,12 +24,25 @@ from redlight import __version__, benchmark
 CLASSIFIER_METRICS = ("brightness", "frame_diff_area", "raw_flow", "flow_norm", "diff_norm")
 CLASSIFIER_FIELDS = (
     "auc",
+    "scope",
     "threshold",
     "frozen_flagged",
     "moving_flagged",
     "frozen_median",
     "moving_median",
 )
+SCENARIO_FIELDS = {
+    "frames",
+    "samples",
+    "overlap_frames",
+    "overlap_samples",
+    "frozen_box",
+    "frame_diff_area_flagged_pct",
+    "first_crossing_s",
+    "per_box_flagged_pct",
+    "per_box_flagged_pct_overlap",
+    "note",
+}
 SWEEP_METRICS = ("brightness", "raw_flow", "flow_norm", "diff_norm")
 SCALE_KEYS = ("0.5x", "1x", "1.667x")
 
@@ -133,19 +147,16 @@ class TestSchema:
             for arm in ("10fps", "30fps"):
                 assert set(entry[arm]) == {"pairs_released", "samples", "flagged_pct"}
 
-    def test_background_scenario_reports_its_measurements(self, results):
-        scenario = results["background_scenario"]
+    def test_background_scenario_reports_both_variants(self, results):
+        scenarios = results["background_scenario"]
 
-        assert set(scenario) == {
-            "frames",
-            "samples",
-            "frozen_box",
-            "frame_diff_area_flagged_pct",
-            "first_crossing_s",
-            "per_box_flagged_pct",
-        }
-        assert set(scenario["frozen_box"]) == {"x", "y", "w", "h"}
-        assert set(scenario["per_box_flagged_pct"]) == {"flow_norm", "diff_norm"}
+        assert set(scenarios) == {"isolated", "occluded"}
+        for variant in scenarios.values():
+            assert set(variant) == SCENARIO_FIELDS
+            assert set(variant["frozen_box"]) == {"x", "y", "w", "h"}
+            for key in ("per_box_flagged_pct", "per_box_flagged_pct_overlap"):
+                assert set(variant[key]) == {"flow_norm", "diff_norm"}
+            assert variant["note"]
 
     def test_runtime_block_times_both_detectors_and_both_metrics(self, results):
         assert set(results["runtime_ms"]) == {
@@ -206,21 +217,64 @@ class TestChosenThresholds:
             else:
                 assert chosen is None
 
-    def test_chosen_thresholds_sit_between_the_fast_set_distributions(self, results):
+    def test_chosen_threshold_is_the_exact_midpoint_of_the_two_edges(self, results):
+        """Pins the arithmetic, not a range that the construction guarantees.
+
+        `frozen_p99 <= chosen < moving_p1` is true of any midpoint by
+        definition and so tests nothing; this pins the value itself, which a
+        changed rule would move.
+        """
         for key in ("flow", "diff"):
             separation = results["threshold_separation"][key]
             chosen = results["chosen_thresholds"][key]
             assert separation["separated"], f"{key} distributions overlap on the fast subset"
-            assert separation["frozen_p99"] <= chosen < separation["moving_p1"]
+            expected = (separation["frozen_p99"] + separation["moving_p1"]) / 2
+            assert chosen == pytest.approx(expected, abs=1e-6)
+            assert separation["rule"] == "midpoint"
 
-    def test_chosen_thresholds_separate_the_fast_set_samples(self, results):
-        """Applied to the samples they were derived from, they must clear the
-        frozen class and keep nearly all of the moving one.
+    def test_chosen_thresholds_clear_every_held_frame(self, results):
+        """The half of the claim that is not entailed by the construction.
+
+        A high moving-flag rate follows from picking a cutoff under the
+        moving 1st percentile, so asserting it proves nothing. That the
+        frozen class stays *entirely* below the cutoff does not follow — the
+        rule only looks at the frozen 99th percentile, so the top 1% is free
+        to sit above it and does not.
         """
         for key, metric in (("flow", "flow_norm"), ("diff", "diff_norm")):
             applied = results["threshold_separation"][key]["applied"]
             assert applied["frozen_flagged"] == 0.0, f"{metric} flags held frames"
-            assert applied["moving_flagged"] >= 95.0, f"{metric} misses walkers"
+
+    def test_midpoint_rule_holds_when_the_frozen_edge_is_nonzero(self):
+        """The rule on synthetic distributions, where the answer is known.
+
+        The real footage produces `frozen_p99 == 0`, so the full run alone
+        could not tell the surviving midpoint rule apart from one that
+        ignored the frozen edge entirely.
+        """
+        samples = benchmark._Samples()
+        samples.frozen["flow_norm"] = [0.2] * 100
+        samples.moving["flow_norm"] = [0.6] * 100
+
+        chosen, separation = benchmark._choose_threshold(samples, "flow_norm")
+
+        assert separation["frozen_p99"] == pytest.approx(0.2)
+        assert separation["moving_p1"] == pytest.approx(0.6)
+        assert chosen == pytest.approx(0.4)  # not sqrt(0.2*0.6) == 0.3464
+        assert separation["rule"] == "midpoint"
+
+    def test_overlapping_distributions_get_no_threshold_at_all(self):
+        """No cutoff may be invented where none separates the classes."""
+        samples = benchmark._Samples()
+        samples.frozen["flow_norm"] = list(np.linspace(0.0, 1.0, 100))
+        samples.moving["flow_norm"] = list(np.linspace(0.0, 1.0, 100))
+
+        chosen, separation = benchmark._choose_threshold(samples, "flow_norm")
+
+        assert chosen is None
+        assert separation["separated"] is False
+        assert separation["rule"] == "none"
+        assert separation["applied"]["frozen_flagged"] is None
 
 
 class TestInvarianceSweeps:
@@ -268,23 +322,56 @@ class TestInvarianceSweeps:
 
 
 class TestBackgroundScenario:
-    def test_a_frozen_player_is_never_flagged_by_the_per_box_metrics(self, results):
-        """The spectator claim: traffic moving around a still player must not
-        put that player out.
+    def test_a_frozen_player_is_never_flagged_when_nothing_crosses_them(self, results):
+        """The spectator claim: traffic moving elsewhere in the shot must not
+        put a still player out.
         """
-        per_box = results["background_scenario"]["per_box_flagged_pct"]
+        per_box = results["background_scenario"]["isolated"]["per_box_flagged_pct"]
 
         assert per_box["flow_norm"] == 0.0
         assert per_box["diff_norm"] == 0.0
 
+    def test_the_isolated_variant_had_walkers_it_painted_over(self, results):
+        """Its 0% has to be a measurement, not a definition.
+
+        Walkers do cross that box in the footage; the isolated composite
+        draws the still player over them. Counting the crossings anyway is
+        what makes its clean result comparable with the occluded one instead
+        of true by construction.
+        """
+        isolated = results["background_scenario"]["isolated"]
+
+        assert isolated["overlap_frames"] > 0
+        assert isolated["per_box_flagged_pct_overlap"]["flow_norm"] == 0.0
+
     def test_whole_frame_differencing_flags_the_same_still_player(self, results):
         """The naive design's failure, measured rather than asserted."""
-        scenario = results["background_scenario"]
+        scenario = results["background_scenario"]["isolated"]
 
         assert scenario["samples"] > 0
         assert scenario["frame_diff_area_flagged_pct"] > 0.0
         assert scenario["first_crossing_s"] is not None
         assert scenario["first_crossing_s"] >= 0.0
+
+    def test_the_occluded_variant_actually_puts_walkers_across_the_box(self, results):
+        """The harder scenario has to be harder, or its result means nothing.
+
+        No assertion on whether occlusion fires the judge: that number is
+        whatever the footage says, and it is a documented limitation either
+        way. What must hold is that walkers really did cross the box —
+        otherwise the variant is silently measuring the isolated case again.
+        """
+        occluded = results["background_scenario"]["occluded"]
+
+        assert occluded["overlap_frames"] > 0
+        assert occluded["overlap_samples"] > 0
+
+    def test_the_two_variants_stand_the_player_in_different_places(self, results):
+        isolated = results["background_scenario"]["isolated"]["frozen_box"]
+        occluded = results["background_scenario"]["occluded"]["frozen_box"]
+
+        assert (isolated["x"], isolated["y"]) != (occluded["x"], occluded["y"])
+        assert (isolated["w"], isolated["h"]) == (occluded["w"], occluded["h"])
 
 
 class TestRuntime:
@@ -300,6 +387,68 @@ class TestRuntime:
         assert runtime["diff_norm_per_player"] < runtime["yolo11n"]
 
 
+class TestHeldFrame:
+    """`_held_frame` builds the entire frozen class. If it ever stopped
+    adding noise, every frozen score would drop to a clean zero and every
+    result in the file would improve — silently, and for no real reason.
+    """
+
+    @staticmethod
+    def _frame() -> np.ndarray:
+        rng = np.random.default_rng(0)
+        return rng.integers(40, 210, size=(64, 64), dtype=np.uint8)
+
+    def test_output_is_a_uint8_frame_of_the_same_shape(self):
+        frame = self._frame()
+
+        held = benchmark._held_frame(frame, np.random.default_rng(1))
+
+        assert held.dtype == np.uint8
+        assert held.shape == frame.shape
+
+    def test_the_held_frame_is_not_the_frame_it_was_given(self):
+        frame = self._frame()
+
+        held = benchmark._held_frame(frame, np.random.default_rng(1))
+
+        assert not np.array_equal(held, frame), "no grain was added"
+        assert np.count_nonzero(held != frame) > frame.size // 4
+
+    def test_deviation_matches_the_declared_sigma(self):
+        """Grain of sigma 2, not sigma 20 and not sigma 0.2.
+
+        Measured on the signed difference, away from the 0/255 clip, so the
+        bound is on what was actually added.
+        """
+        frame = self._frame()
+
+        held = benchmark._held_frame(frame, np.random.default_rng(2))
+        deviation = held.astype(np.int16) - frame.astype(np.int16)
+
+        assert deviation.std() == pytest.approx(benchmark.NOISE_SIGMA, rel=0.15)
+        assert np.abs(deviation).max() <= 6 * benchmark.NOISE_SIGMA
+
+    def test_output_stays_inside_the_byte_range_at_the_extremes(self):
+        """Clipping, not wrapping: black must not roll over to white."""
+        for value in (0, 255):
+            frame = np.full((32, 32), value, dtype=np.uint8)
+
+            held = benchmark._held_frame(frame, np.random.default_rng(3))
+
+            assert held.min() >= 0 and held.max() <= 255
+            assert np.abs(held.astype(np.int16) - value).max() <= 6 * benchmark.NOISE_SIGMA
+
+    def test_the_same_generator_state_reproduces_the_same_grain(self):
+        frame = self._frame()
+
+        first = benchmark._held_frame(frame, np.random.default_rng(4))
+        second = benchmark._held_frame(frame, np.random.default_rng(4))
+        other = benchmark._held_frame(frame, np.random.default_rng(5))
+
+        assert np.array_equal(first, second)
+        assert not np.array_equal(first, other)
+
+
 class TestTraces:
     def test_traces_are_non_empty_and_well_formed(self, results):
         traces = results["traces"]
@@ -308,11 +457,44 @@ class TestTraces:
         assert traces["threshold"] > 0
         assert traces["red_phase_player_traces"]
         for trace in traces["red_phase_player_traces"]:
-            assert set(trace) == {"track_id", "t", "score"}
+            assert set(trace) == {"track_id", "kind", "t", "score"}
+            assert trace["kind"] in ("moving", "frozen")
             assert trace["t"], "trace carries no timestamps"
             assert len(trace["t"]) == len(trace["score"])
             assert trace["t"] == sorted(trace["t"])
             assert all(score >= 0 for score in trace["score"])
+
+    def test_the_lab_shows_both_a_walker_and_a_still_player(self, results):
+        """A threshold lab with only walkers on it can be dragged to zero
+        without ever showing the cost, so a held-frame trace has to be there
+        to be dragged past.
+        """
+        traces = results["traces"]["red_phase_player_traces"]
+        kinds = [trace["kind"] for trace in traces]
+
+        assert kinds.count("moving") >= 1
+        assert kinds.count("frozen") >= 1
+
+    def test_the_still_player_is_cleared_by_the_shipped_threshold(self, results):
+        threshold = results["traces"]["threshold"]
+        frozen = [t for t in results["traces"]["red_phase_player_traces"] if t["kind"] == "frozen"]
+
+        assert frozen
+        for trace in frozen:
+            assert max(trace["score"]) <= threshold, trace["track_id"]
+
+    def test_frozen_and_moving_traces_cover_the_same_samples(self, results):
+        """The contrast is only fair if it is the same player over the same
+        segment — otherwise the lab is comparing two different moments.
+        """
+        traces = results["traces"]["red_phase_player_traces"]
+        by_kind = {"moving": {}, "frozen": {}}
+        for trace in traces:
+            by_kind[trace["kind"]][trace["track_id"]] = trace["t"]
+
+        for track_id, timestamps in by_kind["frozen"].items():
+            assert track_id in by_kind["moving"]
+            assert timestamps == by_kind["moving"][track_id]
 
 
 class TestReproducibility:

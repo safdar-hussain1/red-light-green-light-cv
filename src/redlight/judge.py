@@ -58,6 +58,14 @@ MIN_CROP_PX = 8
 SAMPLE_INTERVAL_S = 0.1
 """How often the referee actually scores, regardless of how fast frames arrive."""
 
+TIMESTAMP_TOLERANCE_S = 1e-9
+"""Slack on the sampling interval, so a float division can't hide a frame.
+
+A nanosecond is orders of magnitude below any real frame period, so this
+never lets an early frame through — it only keeps a timestamp that is
+exactly on the boundary in arithmetic from landing just under it in binary.
+"""
+
 
 def crop_window(gray: np.ndarray, box: Detection) -> np.ndarray | None:
     """Cut the player out of a grayscale frame and normalise them to one size.
@@ -223,6 +231,18 @@ class FrameSampler:
 
     The comparison is always against the last *released* frame, never the last
     frame offered, so nothing is silently measured over a shorter gap.
+
+    The interval is compared with a small tolerance, and that tolerance is
+    load-bearing rather than cosmetic. A camera running at a clean multiple
+    of the interval — 10 fps against a 0.1 s clock is the obvious case —
+    produces timestamps like `i / 10.0`, and in binary floating point the gap
+    between two of those lands a fraction of an ulp under 0.1 about half the
+    time. Compared exactly, the sampler would reject every other frame that
+    is precisely on the boundary and pace itself at half the rate it was
+    asked for, with the interval alternating between one and two frame
+    periods. `TIMESTAMP_TOLERANCE_S` is far below any real frame period, so
+    it cannot admit a frame that is genuinely early; it only stops the last
+    bit of a float division from being read as earliness.
     """
 
     def __init__(self, interval_s: float = SAMPLE_INTERVAL_S):
@@ -246,7 +266,7 @@ class FrameSampler:
             return None
 
         dt = ts - self._last_ts
-        if dt < self._interval_s:
+        if dt < self._interval_s - TIMESTAMP_TOLERANCE_S:
             return None
 
         previous = self._last_gray

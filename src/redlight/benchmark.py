@@ -54,6 +54,7 @@ from redlight.app import MatchReport
 from redlight.config import GameConfig
 from redlight.detection import Detection, make_detector
 from redlight.judge import (
+    DIFF_PIXEL_DELTA,
     SAMPLE_INTERVAL_S,
     FrameSampler,
     diff_score,
@@ -95,6 +96,23 @@ first: 7000 pixels for the two pixel counts, 2 pixels of displacement for
 raw flow.
 """
 
+METRIC_SCOPE = {
+    "brightness": "per_box",
+    "frame_diff_area": "whole_frame",
+    "raw_flow": "per_box",
+    "flow_norm": "per_box",
+    "diff_norm": "per_box",
+}
+"""What each design actually looks at, published beside its score.
+
+`frame_diff_area` takes no box — it counts changed pixels across the entire
+frame — so every player in a pair is handed the same number. Its row in the
+classifier table is therefore a statement about the footage, not about a
+player, and reading it as a per-player result is the exact mistake the
+background scenario exists to catch. The key is in the JSON so a reader does
+not have to know that from the source.
+"""
+
 SCALES: tuple[float, ...] = (0.5, 1.0, 1.667)
 """Resolution sweep: half size, native, and the jump to a 1280-wide sensor."""
 
@@ -106,14 +124,23 @@ TRACE_SAMPLES_FULL = 30
 TRACE_SAMPLES_FAST = 8
 """Length of the armed segment the referee-lab traces are cut from, in samples."""
 
+FROZEN_TRACES = 3
+"""How many of the traced players also ship a held-frame curve, for contrast."""
+
 RUNTIME_FRAMES_FULL = 30
 RUNTIME_FRAMES_FAST = 5
 
 BACKGROUND_MIN_FRAMES = 20
 """Shortest composited run worth reporting a crossing time from."""
 
+BACKGROUND_SEARCH_STEP_PX = 8
+"""Grid step when hunting for the busiest place to stand a still player."""
+
+BACKGROUND_OVERLAP_MIN_FRACTION = 0.05
+"""How much of the frozen box a walker must cover to count as crossing it."""
+
 DEMO_CONFIG = GameConfig(
-    seed=7,
+    seed=3,
     countdown_s=1.0,
     duration_s=12.0,
     phase_min_s=1.5,
@@ -127,8 +154,17 @@ DEMO_CONFIG = GameConfig(
 )
 """The seeded demo match: long enough for several red lights on this footage."""
 
-DEMO_SKIP = 150
-"""Start the demo once the courtyard is busy: a fuller arena to referee."""
+DEMO_SKIP = 200
+"""Start the demo once the courtyard is busy: a fuller arena to referee.
+
+This offset and seed were picked from a sweep for the most legible honest
+match — eliminations at two separate moments rather than a whole crowd going
+out on one frame, and survivors left at the end. Everything about the match
+is still whatever the footage and the shipped threshold produce; the only
+thing chosen was where to start watching. The clustering that remains is
+real: a dozen people walking across a courtyard are all moving when the
+light turns, so a referee that works catches most of them together.
+"""
 
 DEMO_AUTO_START = 20
 """Register after twenty frames of company, so the match has a crowd in it."""
@@ -290,6 +326,7 @@ class _Samples:
         self.moving: dict[str, list[float]] = {name: [] for name in THRESHOLDS}
         self.frozen: dict[str, list[float]] = {name: [] for name in THRESHOLDS}
         self.traces: dict[int, list[tuple[int, float, float]]] = {}
+        self.frozen_traces: dict[int, list[tuple[int, float, float]]] = {}
         self.exclusions = {"no_prior_box": 0, "static_box": 0, "unusable_crop": 0}
         self.static_box_flow: list[float] = []
         self.pairs = 0
@@ -330,6 +367,9 @@ def _collect_samples(max_frames: int | None, boxes_by_frame: list[dict[int, Dete
             samples.traces.setdefault(track_id, []).append(
                 (sample_index, timestamp, moving["flow_norm"])
             )
+            samples.frozen_traces.setdefault(track_id, []).append(
+                (sample_index, timestamp, frozen["flow_norm"])
+            )
 
         sample_index += 1
 
@@ -360,6 +400,7 @@ def _classifier_table(samples: _Samples) -> dict[str, dict[str, float]]:
         scores = np.concatenate([moving, frozen])
         table[name] = {
             "auc": float(roc_auc_score(labels, scores)),
+            "scope": METRIC_SCOPE[name],
             "threshold": threshold,
             "frozen_flagged": _flagged_pct(samples.frozen[name], threshold),
             "moving_flagged": _flagged_pct(samples.moving[name], threshold),
@@ -374,11 +415,18 @@ def _choose_threshold(samples: _Samples, metric: str) -> tuple[float | None, dic
 
     The frozen class's 99th percentile and the moving class's 1st are the
     two edges that matter: a cutoff between them clears the noisiest held
-    frame and still catches all but the faintest walker. The geometric
-    midpoint sits equidistant in the ratio sense, which is the right sense
-    for a score that spans orders of magnitude — but it collapses to zero
-    when the frozen edge is exactly zero, which is what a working deadband
-    produces, so the arithmetic midpoint takes over there.
+    frame and still catches all but the faintest walker. The midpoint of
+    those two edges is the cutoff furthest from both, which is the whole
+    point of picking one — every other choice sits nearer to one class than
+    the other and buys nothing for it.
+
+    One rule, always: `(frozen_p99 + moving_p1) / 2`. A geometric midpoint
+    would be defensible for a score spanning orders of magnitude, but it
+    collapses to zero the moment the frozen edge is zero — which is exactly
+    what a working deadband produces — so it would be a rule that stops
+    working precisely when the judge is working. Two rules also means the
+    published threshold depends on which branch ran, which is one more thing
+    for a reader to have to check.
 
     If the two distributions overlap there is no such cutoff, and this says
     so rather than picking a number that separates nothing.
@@ -389,15 +437,8 @@ def _choose_threshold(samples: _Samples, metric: str) -> tuple[float | None, dic
     moving_p1 = float(np.percentile(moving, 1))
 
     separated = frozen_p99 < moving_p1
-    if not separated:
-        chosen = None
-        rule = "none"
-    elif frozen_p99 > 0.0:
-        chosen = float(np.sqrt(frozen_p99 * moving_p1))
-        rule = "geometric_midpoint"
-    else:
-        chosen = moving_p1 / 2.0
-        rule = "midpoint"
+    chosen = (frozen_p99 + moving_p1) / 2.0 if separated else None
+    rule = "midpoint" if separated else "none"
 
     separation = {
         "frozen_p99": frozen_p99,
@@ -640,38 +681,99 @@ def _pick_frozen_player(
     return best
 
 
-def _background_scenario(
-    max_frames: int | None, boxes_by_frame: list[dict[int, Detection]]
+def _clamped(box: Detection, shape: tuple[int, ...]) -> tuple[int, int, int, int]:
+    """The visible part of a box as (x1, y1, x2, y2) inside a frame."""
+    height, width = shape[:2]
+    return (
+        max(0, box.x),
+        max(0, box.y),
+        min(width, box.x + box.w),
+        min(height, box.y + box.h),
+    )
+
+
+def _overlap_area(a: Detection, b: Detection) -> int:
+    """Area shared by two boxes, in pixels."""
+    x1, y1 = max(a.x, b.x), max(a.y, b.y)
+    x2 = min(a.x + a.w, b.x + b.w)
+    y2 = min(a.y + a.h, b.y + b.h)
+    return max(0, x2 - x1) * max(0, y2 - y1)
+
+
+def _busiest_placement(
+    boxes_by_frame: list[dict[int, Detection]],
+    start_index: int,
+    box: Detection,
+    shape: tuple[int, ...],
+) -> Detection:
+    """Where to stand a still player so the crowd walks through them.
+
+    Every tracked box from the scenario's footage is stamped into an
+    occupancy map, and the box-sized window holding the most of that traffic
+    wins. Scanning on a coarse grid is deliberate — a pixel-exact optimum
+    would be a different answer on different footage for no gain, and the
+    question here is only "somewhere busy", answered the same way every run.
+    """
+    height, width = shape[:2]
+    traffic = np.zeros((height, width), dtype=np.int32)
+    for frame_boxes in boxes_by_frame[start_index:]:
+        for other in frame_boxes.values():
+            x1, y1, x2, y2 = _clamped(other, shape)
+            traffic[y1:y2, x1:x2] += 1
+
+    integral = np.zeros((height + 1, width + 1), dtype=np.int64)
+    integral[1:, 1:] = traffic.cumsum(axis=0).cumsum(axis=1)
+    best_position = (0, 0)
+    best_traffic = -1
+    for y in range(0, max(height - box.h, 0) + 1, BACKGROUND_SEARCH_STEP_PX):
+        for x in range(0, max(width - box.w, 0) + 1, BACKGROUND_SEARCH_STEP_PX):
+            x2, y2 = min(x + box.w, width), min(y + box.h, height)
+            total = int(
+                integral[y2, x2] - integral[y, x2] - integral[y2, x] + integral[y, x]
+            )
+            if total > best_traffic:
+                best_traffic = total
+                best_position = (x, y)
+
+    return Detection(x=best_position[0], y=best_position[1], w=box.w, h=box.h)
+
+
+def _run_scenario(
+    max_frames: int | None,
+    boxes_by_frame: list[dict[int, Detection]],
+    start_index: int,
+    source_box: Detection,
+    frozen_box: Detection,
+    seed_offset: int,
+    occlude: bool,
 ) -> dict:
-    """Paste a motionless player into live traffic and see who calls them out.
+    """Composite one motionless player into live traffic and score them.
 
     The player is frozen: the same crop, at the same coordinates, in every
     frame, with fresh sensor grain each time. Everything around them keeps
-    moving, because everything around them is the real footage. A referee
-    that scores the whole frame cannot tell those two facts apart.
-    """
-    picked = _pick_frozen_player(boxes_by_frame)
-    if picked is None:
-        return {
-            "frames": 0,
-            "samples": 0,
-            "frozen_box": {"x": 0, "y": 0, "w": 0, "h": 0},
-            "frame_diff_area_flagged_pct": 0.0,
-            "first_crossing_s": None,
-            "per_box_flagged_pct": {"flow_norm": 0.0, "diff_norm": 0.0},
-        }
+    moving, because everything around them is the real footage.
 
-    start_index, _track_id, box = picked
-    rng = np.random.default_rng(SEED + 2)
+    With `occlude` set, any tracked box crossing the frozen player's box has
+    its live pixels drawn back over the composite, so walkers pass *in front
+    of* the still player instead of behind them. The occluder is a rectangle,
+    not a silhouette — this footage carries no segmentation — so it drags a
+    little background across the box along with the walker. That errs toward
+    showing movement, which makes a clean per-box result the conservative
+    one and a dirty result honestly dirty.
+    """
+    rng = np.random.default_rng(SEED + seed_offset)
     sampler = FrameSampler()
 
     patch: np.ndarray | None = None
     region: tuple[int, int, int, int] | None = None
     start_ts: float | None = None
+    first_crossing: float | None = None
     whole_flags: list[bool] = []
     flow_flags: list[bool] = []
     diff_flags: list[bool] = []
-    first_crossing: float | None = None
+    overlap_flow_flags: list[bool] = []
+    overlap_diff_flags: list[bool] = []
+    overlap_frames = 0
     frames = 0
 
     for index, timestamp, frame in _read_frames(max_frames):
@@ -679,34 +781,59 @@ def _background_scenario(
             continue
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         if patch is None:
-            height, width = gray.shape[:2]
-            x1, y1 = max(0, box.x), max(0, box.y)
-            x2, y2 = min(width, box.x + box.w), min(height, box.y + box.h)
-            region = (x1, y1, x2, y2)
-            patch = gray[y1:y2, x1:x2].copy()
+            sx1, sy1, sx2, sy2 = _clamped(source_box, gray.shape)
+            source_patch = gray[sy1:sy2, sx1:sx2]
+            region = _clamped(frozen_box, gray.shape)
+            x1, y1, x2, y2 = region
+            patch = cv2.resize(source_patch, (x2 - x1, y2 - y1), interpolation=cv2.INTER_AREA)
             start_ts = timestamp
 
-        composited = gray.copy()
         x1, y1, x2, y2 = region
+        composited = gray.copy()
         composited[y1:y2, x1:x2] = _held_frame(patch, rng)
+
+        # Crossings are counted in both variants, even though only the
+        # occluded one draws them: that is what makes the isolated variant's
+        # 0% a measurement rather than a definition. The same walkers cross
+        # the same box in both runs — one composite paints over them, the
+        # other lets them through — so the two numbers are comparable.
+        crossing = False
+        for _other_id, other in sorted(boxes_by_frame[index].items()):
+            shared = _overlap_area(other, frozen_box)
+            if shared < BACKGROUND_OVERLAP_MIN_FRACTION * frozen_box.w * frozen_box.h:
+                continue
+            crossing = True
+            if not occlude:
+                continue
+            ox1, oy1 = max(other.x, x1), max(other.y, y1)
+            ox2 = min(other.x + other.w, x2)
+            oy2 = min(other.y + other.h, y2)
+            composited[oy1:oy2, ox1:ox2] = gray[oy1:oy2, ox1:ox2]
+
         frames += 1
+        overlap_frames += crossing
 
         sample = sampler.offer(composited, timestamp)
         if sample is None:
             continue
         prev_gray, cur_gray, dt = sample
+
         whole = baselines.frame_diff_area(prev_gray, cur_gray)
         flagged = whole > THRESHOLDS["frame_diff_area"]
         if flagged and first_crossing is None:
             first_crossing = timestamp - start_ts
         whole_flags.append(flagged)
 
-        flow = flow_score(prev_gray, cur_gray, box, dt)
-        diff = diff_score(prev_gray, cur_gray, box, dt)
+        flow = flow_score(prev_gray, cur_gray, frozen_box, dt)
+        diff = diff_score(prev_gray, cur_gray, frozen_box, dt)
         if flow is not None:
             flow_flags.append(flow > THRESHOLDS["flow_norm"])
+            if crossing:
+                overlap_flow_flags.append(flow > THRESHOLDS["flow_norm"])
         if diff is not None:
             diff_flags.append(diff > THRESHOLDS["diff_norm"])
+            if crossing:
+                overlap_diff_flags.append(diff > THRESHOLDS["diff_norm"])
 
     def rate(flags: list[bool]) -> float:
         return 100.0 * sum(flags) / len(flags) if flags else 0.0
@@ -714,11 +841,107 @@ def _background_scenario(
     return {
         "frames": frames,
         "samples": len(whole_flags),
-        "frozen_box": {"x": box.x, "y": box.y, "w": box.w, "h": box.h},
+        "overlap_frames": overlap_frames,
+        "overlap_samples": len(overlap_flow_flags),
+        "frozen_box": {
+            "x": frozen_box.x,
+            "y": frozen_box.y,
+            "w": frozen_box.w,
+            "h": frozen_box.h,
+        },
         "frame_diff_area_flagged_pct": rate(whole_flags),
         "first_crossing_s": first_crossing,
         "per_box_flagged_pct": {"flow_norm": rate(flow_flags), "diff_norm": rate(diff_flags)},
+        "per_box_flagged_pct_overlap": {
+            "flow_norm": rate(overlap_flow_flags),
+            "diff_norm": rate(overlap_diff_flags),
+        },
     }
+
+
+def _empty_scenario(note: str) -> dict:
+    return {
+        "frames": 0,
+        "samples": 0,
+        "overlap_frames": 0,
+        "overlap_samples": 0,
+        "frozen_box": {"x": 0, "y": 0, "w": 0, "h": 0},
+        "frame_diff_area_flagged_pct": 0.0,
+        "first_crossing_s": None,
+        "per_box_flagged_pct": {"flow_norm": 0.0, "diff_norm": 0.0},
+        "per_box_flagged_pct_overlap": {"flow_norm": 0.0, "diff_norm": 0.0},
+        "note": note,
+    }
+
+
+def _background_scenario(
+    max_frames: int | None, boxes_by_frame: list[dict[int, Detection]]
+) -> dict:
+    """Two spectator scenarios: one where the crowd passes by, one through.
+
+    `isolated` stands the still player where they already were and pastes
+    them over everything, so nothing ever crosses in front of them. That
+    isolates the question to "does traffic elsewhere in the shot put this
+    player out", and the answer is the headline: whole-frame differencing
+    says yes, the per-box judge says no.
+
+    That result is also the easy half, and saying so is the point of the
+    second scenario. `occluded` moves the same player to the busiest spot in
+    the frame and lets walkers pass in front of them, which is the harder
+    case a real arena will produce. Whatever that measures is what gets
+    published — if occlusion does fire the per-box judge, that is a
+    limitation for the docs, not a result to bury.
+    """
+    picked = _pick_frozen_player(boxes_by_frame)
+    if picked is None:
+        return {
+            "isolated": _empty_scenario("no usable box in the footage"),
+            "occluded": _empty_scenario("no usable box in the footage"),
+        }
+
+    start_index, _track_id, box = picked
+    shape = _frame_shape()
+
+    isolated = _run_scenario(
+        max_frames,
+        boxes_by_frame,
+        start_index,
+        source_box=box,
+        frozen_box=box,
+        seed_offset=2,
+        occlude=False,
+    )
+    isolated["note"] = (
+        "the frozen crop is drawn over everything, so nothing ever crosses in "
+        "front of the player: this measures traffic elsewhere in the frame, "
+        "not occlusion. See the occluded scenario for that."
+    )
+
+    frozen_box = _busiest_placement(boxes_by_frame, start_index, box, shape)
+    occluded = _run_scenario(
+        max_frames,
+        boxes_by_frame,
+        start_index,
+        source_box=box,
+        frozen_box=frozen_box,
+        seed_offset=3,
+        occlude=True,
+    )
+    occluded["note"] = (
+        "the same still player, moved to the busiest spot in the frame, with "
+        "any tracked box crossing theirs redrawn from the live frame so "
+        "walkers pass in front. per_box_flagged_pct_overlap counts only the "
+        "samples where somebody was actually crossing."
+    )
+
+    return {"isolated": isolated, "occluded": occluded}
+
+
+def _frame_shape() -> tuple[int, ...]:
+    """The footage's frame shape, read from the footage rather than assumed."""
+    for _index, _timestamp, frame in _read_frames(1):
+        return cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY).shape
+    raise RuntimeError(f"no frames in {VIDEO}")
 
 
 # --------------------------------------------------------------------------
@@ -779,6 +1002,13 @@ def _traces(samples: _Samples, fast: bool) -> dict:
     the calls change, so the segment picked is the one carrying the most
     players all the way through — a lab bench with one trace on it teaches
     nothing about where the line should go.
+
+    A few `"kind": "frozen"` traces ship alongside the walkers: the same
+    players' boxes over the same samples, scored against a held frame
+    instead of the next one. Without them the lab only shows a threshold
+    failing to catch people, and a visitor dragging it down would never see
+    the cost — the line has to be somewhere a still player stays cleared,
+    and that is only visible if a still player is on the chart.
     """
     window = TRACE_SAMPLES_FAST if fast else TRACE_SAMPLES_FULL
     if not samples.traces:
@@ -813,18 +1043,21 @@ def _traces(samples: _Samples, fast: bool) -> dict:
         best_start = samples.traces[track_id][0][0]
 
     end = best_start + window - 1
-    traces = []
-    for track_id in best_ids:
-        points = [
-            point for point in samples.traces[track_id] if best_start <= point[0] <= end
-        ]
-        traces.append(
-            {
-                "track_id": track_id,
-                "t": [round(point[1] - points[0][1], 6) for point in points],
-                "score": [point[2] for point in points],
-            }
-        )
+
+    def cut(source: dict[int, list[tuple[int, float, float]]], track_id: int, kind: str):
+        points = [point for point in source[track_id] if best_start <= point[0] <= end]
+        return {
+            "track_id": track_id,
+            "kind": kind,
+            "t": [round(point[1] - points[0][1], 6) for point in points],
+            "score": [point[2] for point in points],
+        }
+
+    traces = [cut(samples.traces, track_id, "moving") for track_id in best_ids]
+    traces.extend(
+        cut(samples.frozen_traces, track_id, "frozen")
+        for track_id in best_ids[:FROZEN_TRACES]
+    )
 
     return {
         "metric": "flow_norm",
@@ -945,6 +1178,16 @@ def run_benchmark(out_path: str, fast: bool = False) -> dict:
                 "detector": DETECTOR,
                 "detector_conf": DETECTOR_CONF,
                 "noise_sigma": NOISE_SIGMA,
+                # Stated rather than left for a reader to notice: sigma 2 is
+                # an order of magnitude below diff's 25-level change
+                # threshold, so a held frame scoring exactly 0 on diff_norm
+                # is arithmetic, not evidence. The result worth trusting is
+                # flow_norm's, whose deadband is sub-pixel and not chosen
+                # against this noise level.
+                "noise_sigma_note": (
+                    f"sigma {NOISE_SIGMA} sits below DIFF_PIXEL_DELTA={DIFF_PIXEL_DELTA}, "
+                    "so diff_norm reading 0.0 on frozen samples is structural"
+                ),
                 "n_moving": len(samples.moving["flow_norm"]),
                 "n_frozen": len(samples.frozen["flow_norm"]),
                 "exclusions": {
@@ -953,6 +1196,14 @@ def run_benchmark(out_path: str, fast: bool = False) -> dict:
                     "static_box_median_flow_norm": float(np.median(samples.static_box_flow))
                     if samples.static_box_flow
                     else None,
+                    # The worst case for the exclusion: had these samples
+                    # been kept in the moving class, this share of them
+                    # would have been called movement anyway. A low number
+                    # means the exclusion removed genuinely still walkers; a
+                    # high one would mean it quietly removed hard positives.
+                    "static_box_flagged_pct": _flagged_pct(
+                        samples.static_box_flow, THRESHOLDS["flow_norm"]
+                    ),
                 },
                 "thresholds": dict(THRESHOLDS),
                 "resolution_scales": list(SCALES),

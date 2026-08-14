@@ -16,6 +16,7 @@ from redlight.judge import (
     DIFF_PIXEL_DELTA,
     FLOW_NOISE_FLOOR_PX,
     SAMPLE_INTERVAL_S,
+    TIMESTAMP_TOLERANCE_S,
     WINDOW,
     FrameSampler,
     MotionJudge,
@@ -184,7 +185,9 @@ def _diff_verdicts(fps: float, v_world: float, duration: float = 1.5) -> list[bo
         if sampled is None:
             continue
         prev_frame, cur_frame, dt = sampled
-        assert SAMPLE_INTERVAL_S <= dt < 2 * SAMPLE_INTERVAL_S, dt
+        # The interval is honoured to within the float-boundary tolerance:
+        # a 30 fps clock lands exactly on 0.1 and may render as a hair under.
+        assert SAMPLE_INTERVAL_S - TIMESTAMP_TOLERANCE_S <= dt < 2 * SAMPLE_INTERVAL_S, dt
         score = diff_score_window(
             crop_window(prev_frame, box), crop_window(cur_frame, box), dt
         )
@@ -234,6 +237,36 @@ def test_frame_sampler_holds_the_interval():
     assert sampler.offer(frame, 0.15) is None  # clock restarted from 0.12
     sampler.reset()
     assert sampler.offer(frame, 9.0) is None  # reset re-primes
+
+
+def test_frame_sampler_releases_every_boundary_on_a_clean_frame_clock():
+    """A 10 fps camera against a 0.1 s clock must release every frame.
+
+    `i / 10.0` timestamps are the ordinary case, not a corner case, and in
+    binary floating point about half of those gaps land a hair under 0.1.
+    Compared exactly, the sampler would drop every other frame and pace
+    itself at 5 fps with the interval flapping between 0.1 and 0.2 — so this
+    pins the whole run, not just one boundary.
+    """
+    frame = _render(_world(), 1.0)
+    sampler = FrameSampler()
+
+    released = [sampler.offer(frame, i / 10.0) for i in range(200)]
+    dts = [sampled[2] for sampled in released if sampled is not None]
+
+    assert len(dts) == 199  # every frame but the one that primes the sampler
+    assert all(dt == pytest.approx(0.1) for dt in dts)
+
+
+def test_frame_sampler_still_holds_back_a_genuinely_early_frame():
+    """The tolerance is for float dust, not for frames that are actually early."""
+    frame = _render(_world(), 1.0)
+    sampler = FrameSampler()
+
+    assert sampler.offer(frame, 0.0) is None
+    # A microsecond short is a thousand times the tolerance: still too soon.
+    assert sampler.offer(frame, SAMPLE_INTERVAL_S - 1e-6) is None
+    assert sampler.offer(frame, SAMPLE_INTERVAL_S) is not None
 
 
 def test_diff_score_window_rejects_bad_windows():
