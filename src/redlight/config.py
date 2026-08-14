@@ -21,8 +21,16 @@ class GameConfig:
         phase_max_s: Maximum duration for red/green phase in seconds.
         grace_s: Grace period in seconds.
         metric: Detection metric ("flow" for optical flow, "diff" for frame difference).
-        threshold: Flow threshold (body fraction per second).
-        diff_threshold: Diff threshold for frame difference detection. Provisional value pending measured benchmark.
+        threshold: Flow threshold (body fraction per second). The benchmark's
+            margin-max midpoint between measured stillness (frozen p99 = 0.0)
+            and the slowest measured walking (moving p1), rounded to 4dp —
+            see `redlight.benchmark._choose_threshold`. Sitting at that
+            midpoint, equidistant from both classes, means it errs strict:
+            it does not lean toward forgiving the faintest walker over
+            clearing the noisiest still frame.
+        diff_threshold: Diff threshold for frame difference detection. Same
+            benchmark-measured midpoint rule as `threshold`, on diff_norm's
+            own scale, rounded to 4dp. Also errs strict.
         confirm_frames: Number of frames to confirm motion before elimination.
         smoothing: Temporal smoothing factor, in (0, 1].
         detector: Object detector to use ("yolo" for accuracy, "hog" for a
@@ -38,8 +46,8 @@ class GameConfig:
     phase_max_s: float = 5.0
     grace_s: float = 0.6
     metric: str = "flow"
-    threshold: float = 0.12
-    diff_threshold: float = 0.60
+    threshold: float = 0.0767
+    diff_threshold: float = 0.1455
     confirm_frames: int = 3
     smoothing: float = 0.5
     detector: str = "yolo"

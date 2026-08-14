@@ -18,7 +18,7 @@ dependencies = [
 
 [project.optional-dependencies]
 audio = ["pygame>=2.5"]
-analysis = ["matplotlib>=3.8", "scikit-learn>=1.4", "jupyter", "ipykernel"]
+analysis = ["matplotlib>=3.8", "scikit-learn>=1.4", "pillow>=10", "jupyter", "ipykernel"]
 dev = ["pytest>=8"]
 
 [project.scripts]
