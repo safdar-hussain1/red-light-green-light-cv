@@ -19,14 +19,14 @@
       "unusable_crop": 0,
       "min_center_displacement_px": 0.5,
       "static_box_median_flow_norm": 0.305861,
-      "static_box_flagged_pct": 62.686567
+      "static_box_flagged_pct": 73.134328
     },
     "thresholds": {
       "brightness": 7000.0,
       "frame_diff_area": 7000.0,
       "raw_flow": 2.0,
-      "flow_norm": 0.12,
-      "diff_norm": 0.6
+      "flow_norm": 0.0767,
+      "diff_norm": 0.1455
     },
     "resolution_scales": [
       0.5,
@@ -66,18 +66,18 @@
     "flow_norm": {
       "auc": 0.999546,
       "scope": "per_box",
-      "threshold": 0.12,
+      "threshold": 0.0767,
       "frozen_flagged": 0.0,
-      "moving_flagged": 99.274376,
+      "moving_flagged": 99.591837,
       "frozen_median": 0.0,
       "moving_median": 1.18453
     },
     "diff_norm": {
       "auc": 0.999546,
       "scope": "per_box",
-      "threshold": 0.6,
+      "threshold": 0.1455,
       "frozen_flagged": 0.0,
-      "moving_flagged": 97.414966,
+      "moving_flagged": 99.52381,
       "frozen_median": 0.0,
       "moving_median": 3.599175
     }
@@ -143,29 +143,29 @@
     "flow_norm": {
       "0.5x": {
         "frozen_flagged": 0.0,
-        "moving_flagged": 98.397436
+        "moving_flagged": 98.878205
       },
       "1x": {
         "frozen_flagged": 0.0,
-        "moving_flagged": 99.267399
+        "moving_flagged": 99.587912
       },
       "1.667x": {
         "frozen_flagged": 0.0,
-        "moving_flagged": 99.313187
+        "moving_flagged": 99.679487
       }
     },
     "diff_norm": {
       "0.5x": {
         "frozen_flagged": 0.0,
-        "moving_flagged": 96.978022
+        "moving_flagged": 99.15293
       },
       "1x": {
         "frozen_flagged": 0.0,
-        "moving_flagged": 97.39011
+        "moving_flagged": 99.519231
       },
       "1.667x": {
         "frozen_flagged": 0.0,
-        "moving_flagged": 97.252747
+        "moving_flagged": 99.404762
       }
     }
   },
@@ -174,12 +174,12 @@
       "10fps": {
         "pairs_released": 794,
         "samples": 4410,
-        "flagged_pct": 99.274376
+        "flagged_pct": 99.591837
       },
       "30fps": {
         "pairs_released": 794,
         "samples": 4410,
-        "flagged_pct": 99.274376
+        "flagged_pct": 99.591837
       },
       "pairs_compared": 794,
       "dt_mismatch_pct": 0.0,
@@ -190,12 +190,12 @@
       "10fps": {
         "pairs_released": 794,
         "samples": 4410,
-        "flagged_pct": 97.414966
+        "flagged_pct": 99.52381
       },
       "30fps": {
         "pairs_released": 794,
         "samples": 4410,
-        "flagged_pct": 97.414966
+        "flagged_pct": 99.52381
       },
       "pairs_compared": 794,
       "dt_mismatch_pct": 0.0,
@@ -241,25 +241,25 @@
       "frame_diff_area_flagged_pct": 69.432314,
       "first_crossing_s": 0.5,
       "per_box_flagged_pct": {
-        "flow_norm": 65.938865,
-        "diff_norm": 52.838428
+        "flow_norm": 69.868996,
+        "diff_norm": 73.799127
       },
       "per_box_flagged_pct_overlap": {
-        "flow_norm": 84.659091,
-        "diff_norm": 67.613636
+        "flow_norm": 89.772727,
+        "diff_norm": 94.886364
       },
       "note": "the same still player, moved to the busiest spot in the frame, with any tracked box crossing theirs redrawn from the live frame so walkers pass in front. per_box_flagged_pct_overlap counts only the samples where somebody was actually crossing."
     }
   },
   "runtime_ms": {
-    "yolo11n": 36.466583,
-    "hog": 144.243021,
-    "flow_norm_per_player": 1.057125,
-    "diff_norm_per_player": 0.045791
+    "yolo11n": 32.678063,
+    "hog": 114.883604,
+    "flow_norm_per_player": 0.846271,
+    "diff_norm_per_player": 0.036334
   },
   "traces": {
     "metric": "flow_norm",
-    "threshold": 0.12,
+    "threshold": 0.0767,
     "sample_interval_s": 0.1,
     "window_samples": 30,
     "red_phase_player_traces": [
@@ -846,7 +846,7 @@
       ],
       [
         4,
-        3.5,
+        3.3,
         "moved"
       ]
     ],
@@ -854,7 +854,7 @@
       "seed": 3,
       "detector": "yolo",
       "metric": "flow",
-      "threshold": 0.12,
+      "threshold": 0.0767,
       "confirm_frames": 3,
       "countdown_s": 1.0,
       "duration_s": 12.0,

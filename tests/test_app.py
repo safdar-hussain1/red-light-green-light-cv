@@ -1,7 +1,8 @@
 """Tests for the end-to-end pipeline runner (`app.run`) and its HUD.
 
-Every `app.run` test here drives `data/vtest.avi` with the fast HOG
-detector and small durations, so the whole suite stays quick even though it
+Every `app.run` test here drives `data/vtest.avi` with the weights-free HOG
+detector and small durations, so the whole suite stays quick -- no model file
+to load per run -- even though it
 exercises the real detect -> track -> judge -> game -> HUD loop end to end;
 one slow test at the bottom repeats a minimal run with the default YOLO
 detector, for confidence that the production detector path wires up the

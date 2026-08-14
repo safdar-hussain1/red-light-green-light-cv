@@ -33,8 +33,9 @@ class GameConfig:
             own scale, rounded to 4dp. Also errs strict.
         confirm_frames: Number of frames to confirm motion before elimination.
         smoothing: Temporal smoothing factor, in (0, 1].
-        detector: Object detector to use ("yolo" for accuracy, "hog" for a
-            fast, weights-free fallback).
+        detector: Object detector to use ("yolo" for accuracy, "hog" for the
+            weights-free classical option — no model download, and 3.5x slower
+            than yolo on the committed benchmark).
         conf: Confidence threshold for detector.
         max_misses: Maximum consecutive frames without detection before resetting.
     """
@@ -110,7 +111,7 @@ class GameConfig:
 
         # Check detector is valid. "hog" is accepted alongside "yolo": both
         # are real, supported choices in detection.make_detector (yolo for
-        # accuracy, hog as a fast fallback needing no model weights), so
+        # accuracy, hog as the weights-free classical option), so
         # both must pass validation for a caller to actually use hog.
         valid_detectors = {"yolo", "hog"}
         if self.detector not in valid_detectors:

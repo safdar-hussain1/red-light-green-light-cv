@@ -111,13 +111,22 @@ own apparent size changed, per second of real time.
 
 | | Divides out with `/dt`? | Why |
 |---|---|---|
-| `flow_score` | Yes, within a band | Displacement is proportional to elapsed time, so displacement / time is a rate. Honest across roughly **2.2–7 px** of window displacement. |
+| `flow_score` | Yes, within a band | Displacement is proportional to elapsed time, so displacement / time is a rate. Operating band roughly **2.2–7 px** of window displacement — see the note below on what that band is and is not. |
 | `diff_score` | **No** | A changed-pixel count is superlinear in displacement: a bigger step does not merely move more pixels, it pushes more of them past the 25-level delta. |
 
-Outside the flow band, both edges are documented rather than hidden: below
-~2.2 px the fixed sub-pixel deadband takes a disproportionate bite out of
-the smaller step; above ~7 px Farneback saturates and over-reads, so a fast
-step scores higher than its true displacement. Over-reading errs toward
+That band is a design-time statement, documented on `flow_score` itself, not
+a swept measurement: the lower edge is where the fixed 0.5 px deadband starts
+taking a disproportionate bite out of the smaller step, the upper edge is
+where Farneback saturates and over-reads. What the suite pins is behaviour at interior
+points — `test_score_is_framerate_invariant` halves a 4.8 px window
+displacement to 2.4 px, halves its interval with it, and requires the score to
+hold within 30%; `test_score_is_resolution_invariant` holds 6.0 px of window
+displacement across three scales. A reader wanting the band's edges as numbers should sweep them, not cite
+this.
+
+Outside the band, both failure directions are documented rather than hidden:
+below it the deadband dominates; above it a fast step scores higher than its
+true displacement. Over-reading errs toward
 calling movement — the safe direction for a referee — but the score stops
 being a literal body-fraction at the fast end.
 
@@ -160,7 +169,8 @@ precisely on the boundary and paces itself at half the rate it was asked
 for, with the interval alternating between one and two frame periods. That
 is not hypothetical: it is what this harness did before the tolerance was
 added, and fixing it moved the released-pair count from 543 to 794 of 795
-frames and the frame-rate agreement from 99.74% to 100.00%. A nanosecond is
+frames and the frame-rate agreement from 99.74% to 100.00% on flow and from
+99.23% to 100.00% on diff. A nanosecond is
 orders of magnitude below any real frame period, so the tolerance cannot
 admit a genuinely early frame.
 
@@ -218,8 +228,10 @@ multipliers on top of the measured one for that reason.
 
 `MotionJudge.update` compares `ema > threshold`, strictly — a score sitting
 exactly on the cutoff is not a call — and the benchmark's `_flagged_pct`
-uses the same strict comparison so the published rates match what the judge
-would actually do.
+uses the same strict comparison. The published run also scores both
+normalized metrics **at the cutoffs the engine ships**, so the classifier
+table's rates are the rates the shipped judge produces on those samples,
+not a nearby setting's.
 
 ---
 
@@ -227,7 +239,7 @@ would actually do.
 
 | Claim | Evidence | Result |
 |---|---|---|
-| Distance / resolution does not change the verdict | `resolution_sweep`, 4368 samples at 0.5x / 1x / 1.667x | `flow_norm` 98.40 / 99.27 / 99.31% moving flagged, 0.00% frozen at every scale; `diff_norm` 96.98 / 97.39 / 97.25%, 0.00% frozen |
+| Distance / resolution does not change the verdict | `resolution_sweep`, 4368 samples at 0.5x / 1x / 1.667x | `flow_norm` 98.88 / 99.59 / 99.68% moving flagged, 0.00% frozen at every scale; `diff_norm` 99.15 / 99.52 / 99.40%, 0.00% frozen |
 | ... and the naive designs do not hold it | same sweep | `brightness_count` 0.00% → 24.22% moving as the footage grows, flagging frozen at the same rate; `raw_flow_max` drops 21 points of walkers at half size |
 | ... on a synthetic scene with an exact displacement | `test_score_is_resolution_invariant` | Scores at 0.5x / 1x / 2x within a factor of 1.35, each at least 10x the still-player baseline |
 | Frame rate does not change the verdict | `fps_sweep`, 10 fps vs 30 fps through `FrameSampler` | 794 pairs compared, dt mismatch 0.00%, **4410 of 4410 decisions agree (100.00%)** on both metrics |
@@ -276,11 +288,12 @@ frame, so walkers pass **in front of** them:
 | Frames / samples | 230 / 229 | 230 / 229 |
 | Crossing frames | 40 | 177 |
 | Whole-frame `frame_diff_area` | 51.09%, first at 0.8 s | 69.43%, first at 0.5 s |
-| Per-box flow / diff, all samples | 0.00% / 0.00% | 65.94% / 52.84% |
-| Per-box flow / diff, crossing samples only | 0.00% / 0.00% | **84.66% / 67.61%** |
+| Per-box flow / diff, all samples | 0.00% / 0.00% | 69.87% / 73.80% |
+| Per-box flow / diff, crossing samples only | 0.00% / 0.00% | **89.77% / 94.89%** |
 
-Scoring a box means scoring whatever is inside it. Two caveats make 84.66%
-a ceiling rather than a precise figure: the occluder is the walker's
+Scoring a box means scoring whatever is inside it, and at the shipped
+cutoffs that is most of the crossing samples on flow and nearly all of them
+on diff. Two caveats make those a ceiling rather than precise figures: the occluder is the walker's
 *bounding box*, not a silhouette, so it drags some background motion across
 the frozen box with it; and this is raw per-sample scoring, without the EMA
 and 3-in-a-row confirmation a brief pass-through may never clear. The
@@ -294,12 +307,12 @@ A walker whose box centre moved less than 0.5 px between the two frames of a
 pair is not honest evidence of motion, so those samples are dropped from
 both classes (the classes are paired sample-for-sample, so dropping one
 drops its twin). On this footage that is **67 of 4618** candidates, 1.5%.
-Their median `flow_norm` is **0.306**, and **62.69%** of them would have
+Their median `flow_norm` is **0.306**, and **73.13%** of them would have
 been flagged at the shipped cutoff anyway.
 
 So the exclusion does flatter the metric slightly: including those samples
-would put `flow_norm`'s moving flag rate at roughly **98.7%** instead of the
-published **99.27%**. They are still dropped, because a box that did not
+would put `flow_norm`'s moving flag rate at roughly **99.20%** instead of the
+published **99.59%**. They are still dropped, because a box that did not
 measurably move is not evidence that the player did — but the size of the
 effect is published rather than left implicit. `no_prior_box` (141) and
 `unusable_crop` (0) are reported the same way.

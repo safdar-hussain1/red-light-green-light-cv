@@ -1,7 +1,7 @@
 """Tests for the `redlight` command-line interface.
 
-`play` tests that actually run a match use `data/vtest.avi` with the fast
-HOG detector and tiny durations (mirroring `tests/test_app.py`'s
+`play` tests that actually run a match use `data/vtest.avi` with the
+weights-free HOG detector and tiny durations (mirroring `tests/test_app.py`'s
 `make_config`/`RUN_KWARGS`), so this file stays fast even though it drives
 the real CLI -> `app.run` path end to end.
 """
@@ -139,8 +139,8 @@ class TestPlaySourceParsing:
 
 
 class TestPlaySmoke:
-    """One real run through the CLI, exercised with the fast HOG detector
-    so it stays well under a second even though it drives the full
+    """One real run through the CLI, exercised with the weights-free HOG
+    detector so it stays well under a second even though it drives the full
     detect -> track -> judge -> game -> HUD pipeline (marked slow only out
     of caution for slower machines; --skip/--duration keep it small).
     """

@@ -141,7 +141,10 @@ def _add_play_arguments(parser: argparse.ArgumentParser) -> None:
         "--detector",
         choices=["yolo", "hog"],
         default=defaults.detector,
-        help="Person detector: yolo (accurate) or hog (fast, no weights) (default: %(default)s).",
+        help=(
+            "Person detector: yolo (accurate) or hog (weights-free classical option, "
+            "no model download, several times slower than yolo) (default: %(default)s)."
+        ),
     )
     parser.add_argument(
         "--conf",

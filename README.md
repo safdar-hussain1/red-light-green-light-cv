@@ -114,10 +114,12 @@ Two metrics run on those windows:
 
 **Frame rate is handled by a clock, not by arithmetic.** Displacement really
 is proportional to the gap between frames, so dividing flow by `dt` genuinely
-turns it into a rate — within an honest band of roughly 2.2 to 7 pixels of
-window displacement. Below that the fixed sub-pixel deadband takes a
-disproportionate bite out of the smaller step; above it the flow estimator
-saturates and over-reads.
+turns it into a rate — within a design-time operating band of roughly 2.2 to
+7 pixels of window displacement, documented on `flow_score` in `judge.py`.
+Below that band the fixed sub-pixel deadband takes a disproportionate bite out
+of the smaller step; above it the flow estimator saturates and over-reads. The
+band's edges are a design-time choice rather than a swept measurement; the
+tests exercise interior points of it (2.4 to 6.0 px of window displacement).
 
 A changed-pixel count is different: it grows *faster* than linearly with
 displacement, because a bigger step does not merely move more pixels, it
@@ -167,8 +169,8 @@ same frame held in place with seeded gaussian sensor grain, sigma 2, on top
 | `brightness_count` | per box | 0.4998 | 7000 px | 0.50% | 0.50% |
 | `frame_diff_area` | **whole frame** | 1.0000 | 7000 px | 0.00% | 35.31% |
 | `raw_flow_max` | per box | 0.9996 | 2.0 px | 0.05% | 96.15% |
-| `flow_score` | per box | 0.9995 | 0.12 | **0.00%** | **99.27%** |
-| `diff_score` | per box | 0.9995 | 0.60 | **0.00%** | **97.41%** |
+| `flow_score` | per box | 0.9995 | **0.0767** | **0.00%** | **99.59%** |
+| `diff_score` | per box | 0.9995 | **0.1455** | **0.00%** | **99.52%** |
 
 Read that table with three things in mind. `brightness_count` sits at chance
 because it never compares two frames — its frozen and moving rates are
@@ -176,10 +178,12 @@ identical to three decimals, which is the clearest possible statement that
 it has no temporal term. `frame_diff_area` takes no box at all, so every
 player in a pair gets the same number; its row is a statement about the
 footage, not about a player, and its failure shows up in the background
-scenario below. And the last two rows were scored at the cutoffs the engine
-shipped when that run was made (0.12 / 0.60); the benchmark-selected 0.0767
-/ 0.1455 the engine ships now are **stricter**, and their effect on the same
-samples is the 0.00% / 99.59% / 99.52% quoted above.
+scenario below. And the "cutoff used" column is not decoration: each naive
+design is judged at the round number somebody reaching for it would reach
+for first, while the last two rows are judged at the cutoffs the engine
+actually ships — the benchmark-selected 0.0767 and 0.1455 — so those two rows
+are what the shipped referee does to these samples, not what some other
+setting would have done.
 
 ![Moving vs. frozen score distributions](reports/figures/score_distributions.png)
 
@@ -197,8 +201,8 @@ scoreable at all three scales:
 |---|---|---|---|
 | `brightness_count` | 0.00% / 0.00% | 0.50% / 0.50% | 24.22% / 24.24% |
 | `raw_flow_max` | 75.23% / 0.09% | 96.15% / 0.05% | 99.20% / 0.02% |
-| `flow_score` | 98.40% / 0.00% | 99.27% / 0.00% | 99.31% / 0.00% |
-| `diff_score` | 96.98% / 0.00% | 97.39% / 0.00% | 97.25% / 0.00% |
+| `flow_score` | 98.88% / 0.00% | 99.59% / 0.00% | 99.68% / 0.00% |
+| `diff_score` | 99.15% / 0.00% | 99.52% / 0.00% | 99.40% / 0.00% |
 
 `raw_flow_max` misses 21 points of walkers at half size that it catches at
 native resolution: the same stride, fewer raw pixels, below the cutoff.
@@ -229,8 +233,8 @@ variants:
 |---|---|---|
 | Frames where a walker crossed the box | 40 | 177 |
 | Whole-frame `frame_diff_area` flags the still player | **51.09%** of samples, first at **0.8 s** | 69.43%, first at 0.5 s |
-| Per-box `flow_score` / `diff_score` | **0.00% / 0.00%** | 65.94% / 52.84% |
-| Per-box, counting only crossing samples | **0.00% / 0.00%** | **84.66% / 67.61%** |
+| Per-box `flow_score` / `diff_score` | **0.00% / 0.00%** | 69.87% / 73.80% |
+| Per-box, counting only crossing samples | **0.00% / 0.00%** | **89.77% / 94.89%** |
 
 The left column is the headline: whole-frame differencing charges a
 motionless player for everybody else in the shot, crossing its cutoff within
@@ -239,9 +243,10 @@ inside their own box reads exactly zero.
 
 The right column is the limitation, published rather than buried. Scoring a
 box means scoring whatever is inside it, and a body walking **through** your
-box puts moving pixels inside it: 84.66% of the crossing samples flag a
-motionless player. See [Limitations](#limitations) for the two caveats that
-make that a ceiling rather than a precise figure.
+box puts moving pixels inside it: 89.77% of the crossing samples flag a
+motionless player on flow, and 94.89% on diff. See
+[Limitations](#limitations) for the two caveats that make those a ceiling
+rather than precise figures.
 
 ### Runtime
 
@@ -251,13 +256,13 @@ Median per call, Apple Silicon, single-threaded, 768 × 576 frames:
 
 | Stage | ms |
 |---|---|
-| YOLO11n detection, per frame | 36.5 |
-| HOG detection, per frame | 144.2 |
-| `flow_score`, per player | 1.06 |
-| `diff_score`, per player | 0.046 |
+| YOLO11n detection, per frame | 32.7 |
+| HOG detection, per frame | 114.9 |
+| `flow_score`, per player | 0.85 |
+| `diff_score`, per player | 0.036 |
 
 HOG is the **weights-free classical option** — no model file to fetch — and
-on this footage at these settings it is about 4x *slower* than YOLO11n, not
+on this footage at these settings it is about 3.5x *slower* than YOLO11n, not
 faster. Judging costs almost nothing next to finding people, which is why
 the browser can afford the diff metric on four players at 10 samples a
 second.
@@ -268,7 +273,7 @@ second.
 
 One seeded run of the same `redlight play` pipeline, starting 200 frames in
 so the courtyard is busy: 9 players registered, 1 lost from the arena at
-0.8 s, 5 eliminated for moving at 2.7 s and 1 more at 3.5 s, 2 survivors,
+0.8 s, 5 eliminated for moving at 2.7 s and 1 more at 3.3 s, 2 survivors,
 outcome **victory**. The starting offset and the seed were the only things
 chosen; the clustering is real, because a dozen people walking across a
 courtyard are all moving when the light turns.
@@ -281,16 +286,18 @@ Every one of these is measured or reproducible, not hypothetical.
 
 - **Somebody crossing your box can put you out.** The per-box judge protects
   a still player from traffic elsewhere in the shot (0.00%), but not from a
-  body passing in front of them: 84.66% of crossing samples flag a
-  motionless player on flow. Two caveats make that a ceiling rather than an
-  exact figure — the occluder is the walker's bounding box rather than a
-  silhouette, so it drags some background motion across with it, and the
-  measurement is raw per-sample scoring without the smoothing and
-  3-in-a-row confirmation a brief pass-through may never clear. The
-  direction is not in doubt, only the magnitude.
-- **Flow saturates on fast motion.** `flow_score` is honest across roughly
-  2.2 to 7 pixels of window displacement. Beyond that Farneback over-reads,
-  so a fast step scores higher than its true displacement. Over-reading errs
+  body passing in front of them: 89.77% of crossing samples flag a
+  motionless player on flow, and 94.89% on diff. Two caveats make those a
+  ceiling rather than exact figures — the occluder is the walker's bounding
+  box rather than a silhouette, so it drags some background motion across
+  with it, and the measurement is raw per-sample scoring without the
+  smoothing and 3-in-a-row confirmation a brief pass-through may never
+  clear. The direction is not in doubt, only the magnitude.
+- **Flow saturates on fast motion.** `flow_score`'s operating band is
+  roughly 2.2 to 7 pixels of window displacement — a design-time band
+  documented on the function, not a swept measurement; the tests exercise
+  interior points of it (2.4 to 6.0 px). Beyond it Farneback over-reads, so
+  a fast step scores higher than its true displacement. Over-reading errs
   toward calling movement, which is the safe direction for a referee, but it
   means the number stops being a literal body-fraction at the fast end.
 - **The frozen class is held frames plus sigma-2 grain.** Sigma 2 sits an

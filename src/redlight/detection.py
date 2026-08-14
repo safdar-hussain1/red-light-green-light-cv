@@ -82,8 +82,9 @@ def _hog_passes_threshold(weight: float, conf: float) -> bool:
 class HogDetector:
     """Finds people with OpenCV's built-in HOG + linear SVM detector.
 
-    A lightweight fallback that needs no model weights, at the cost of
-    accuracy compared to the YOLO detector.
+    The classical option: no model weights to download, at the cost of
+    accuracy compared to the YOLO detector -- and, on the committed benchmark,
+    3.5x the time per frame.
     """
 
     def __init__(self, conf: float = 0.35):
@@ -106,7 +107,8 @@ class HogDetector:
 
 def make_detector(name: str, conf: float) -> Detector:
     """Build a detector by name: "yolo" (accurate, needs model weights) or
-    "hog" (fast, no weights needed).
+    "hog" (the weights-free classical option: no model download, and 3.5x
+    slower than yolo on the committed benchmark).
 
     Raises:
         ConfigError: If name is not a recognized detector.
