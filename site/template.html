@@ -196,8 +196,8 @@
                     Ruthless
                   </button>
                 </div>
-                <button class="btn btn-quiet" id="btnSound" type="button" aria-pressed="false">
-                  Sound off
+                <button class="btn btn-quiet" id="btnSound" type="button" aria-pressed="true">
+                  Sound on
                 </button>
                 <p class="difficulty-note" id="difficultyNote"></p>
               </div>
@@ -420,10 +420,11 @@
           <p class="note" style="margin-top: 0.9rem; max-width: 78ch">
             These are the flow scores the Python engine records, in the same
             units as its cutoff. The dotted line is what the benchmark selected
-            — the midpoint between the highest frozen sample and the lowest
-            moving one. The shaded band is every cutoff that produces the
-            identical eight verdicts, found by bisecting through the judge
-            itself rather than by asserting that the choice is robust.
+            — the midpoint between the 99th percentile of the frozen samples
+            and the 1st percentile of the moving ones. The shaded band is
+            every cutoff that produces the identical eight verdicts, found by
+            bisecting through the judge itself rather than by asserting that
+            the choice is robust.
           </p>
         </section>
 
@@ -496,9 +497,9 @@
                   <span class="k">First false call</span>
                   <span class="v">&mdash;</span>
                 </div>
-                <div class="readout" data-flavour="good">
+                <div class="readout" id="bgPerBox" data-flavour="good">
                   <span class="k">Same player, per box</span>
-                  <span class="v">0.00%</span>
+                  <span class="v">&mdash;</span>
                 </div>
               </div>
             </div>

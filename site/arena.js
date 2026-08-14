@@ -46,15 +46,38 @@ const METER_SCALE = 2.0;
 /** Circumference of the countdown ring's circle (r = 54). */
 const RING_CIRCUMFERENCE = 2 * Math.PI * 54;
 
-/** Phases the replay steps through, chosen to fit the recorded calls. */
-const REPLAY_SCHEDULE = Object.freeze([
-  { phase: "GREEN", from: 0.0, to: 2.1 },
-  { phase: "RED", from: 2.1, to: 4.5 },
-  { phase: "GREEN", from: 4.5, to: 6.6 },
-  { phase: "RED", from: 6.6, to: 8.8 },
-  { phase: "GREEN", from: 8.8, to: 10.5 },
-  { phase: "RED", from: 10.5, to: 12.0 },
+/**
+ * Phases the replay steps through, as fractions of the match duration.
+ *
+ * Chosen to fit the recorded calls at the 12.0 s duration this demo was
+ * baked with. Kept as fractions rather than absolute seconds so the last
+ * boundary always lands exactly on whatever `duration_s` the baked demo
+ * actually ships — `buildReplaySchedule` scales these against it — and a
+ * regenerated demo with a different duration cannot leave a slot lookup
+ * with nowhere to land.
+ */
+const REPLAY_SCHEDULE_FRACTIONS = Object.freeze([
+  { phase: "GREEN", from: 0.0 / 12.0, to: 2.1 / 12.0 },
+  { phase: "RED", from: 2.1 / 12.0, to: 4.5 / 12.0 },
+  { phase: "GREEN", from: 4.5 / 12.0, to: 6.6 / 12.0 },
+  { phase: "RED", from: 6.6 / 12.0, to: 8.8 / 12.0 },
+  { phase: "GREEN", from: 8.8 / 12.0, to: 10.5 / 12.0 },
+  { phase: "RED", from: 10.5 / 12.0, to: 1.0 },
 ]);
+
+/**
+ * The replay schedule for one match, in seconds.
+ *
+ * The last slot's `to` is exactly `duration`, so any `matchT` inside
+ * `[0, duration)` — the only range the caller ever looks up — is covered.
+ */
+function buildReplaySchedule(duration) {
+  return REPLAY_SCHEDULE_FRACTIONS.map((slot) => ({
+    phase: slot.phase,
+    from: slot.from * duration,
+    to: slot.to * duration,
+  }));
+}
 
 /* ------------------------------------------------------------------ theme */
 
@@ -401,10 +424,20 @@ class Arena {
     this.video.srcObject = null;
   }
 
-  stop() {
+  /**
+   * Stop the camera and the pose loop, without touching the chant or the
+   * end card.
+   *
+   * Called both when a match finishes on its own (`endMatch`, where the
+   * chant has its own sting to play and the end card has to stay up) and
+   * when the visitor walks away from one (`stop`, where everything goes
+   * quiet). A match that has ended still has a live camera and a running
+   * `requestAnimationFrame` loop until this runs — nothing else in `loop()`
+   * checks whether the game is finished.
+   */
+  stopEngine() {
     if (this.rafId !== null) cancelAnimationFrame(this.rafId);
     this.rafId = null;
-    this.chant.stop();
     this.releaseCamera();
     if (this.poseSource && this.poseSource.close) {
       try {
@@ -414,6 +447,11 @@ class Arena {
       }
     }
     this.poseSource = null;
+  }
+
+  stop() {
+    this.chant.stop();
+    this.stopEngine();
   }
 
   /* ----------------------------------------------------------- main loop */
@@ -569,6 +607,16 @@ class Arena {
   endMatch(phase) {
     this.safeAudio(() => this.chant.stop());
     this.safeAudio(() => this.chant.sting(phase === "VICTORY"));
+    // The match is decided; nothing after this point needs a camera frame
+    // or a pose detection. Stopping here — not waiting for "Play again" —
+    // is what actually releases the camera, since `loop()` has no idea the
+    // game is finished and would otherwise keep detecting and rendering
+    // against a stage nobody can act on any more. `stopEngine` leaves the
+    // chant alone (the sting above is still playing) and leaves the end
+    // card and roster exactly as rendered.
+    this.stopEngine();
+    const button = el("btnPlay");
+    if (button) button.disabled = false;
     const survivors = this.game ? this.game.aliveCount : 0;
     this.endCard.dataset.show = "true";
     this.endCard.dataset.outcome = phase;
@@ -763,6 +811,7 @@ class Arena {
     const grace = demo.config.grace_s;
     const countdown = demo.config.countdown_s;
     const duration = demo.config.duration_s;
+    const schedule = buildReplaySchedule(duration);
 
     if (this.idle) this.idle.hidden = true;
     this.endCard.dataset.show = "false";
@@ -816,8 +865,17 @@ class Arena {
         Probe.note("replay-end");
         return;
       } else {
-        const slot = REPLAY_SCHEDULE.find((s) => matchT >= s.from && matchT < s.to);
-        const phase = slot ? slot.phase : "RED";
+        // `schedule` always spans exactly `[0, duration)`, so this lookup
+        // succeeds for any `matchT` reachable here — the branch above already
+        // returns once `matchT >= duration`. The fallback is a complete slot
+        // object regardless, so a future change to the schedule's shape
+        // cannot turn a missed lookup into a `slot.from` crash.
+        const slot = schedule.find((s) => matchT >= s.from && matchT < s.to) || {
+          phase: "RED",
+          from: schedule.length ? schedule[schedule.length - 1].to : 0,
+          to: duration,
+        };
+        const phase = slot.phase;
         if (this.stage.dataset.phase !== phase) this.setPhase(phase);
         if (phase === "RED") {
           this.setPhaseSub(matchT - slot.from >= grace ? "Armed" : "Grace");
@@ -938,12 +996,21 @@ function initArena() {
 
   const sound = el("btnSound");
   if (sound) {
-    sound.addEventListener("click", () => {
-      const muted = sound.getAttribute("aria-pressed") === "true";
+    // The label always names the state the button is currently in — "Sound
+    // on" when the chant is audible — never the action a click would take.
+    // Read from `arena.chant.muted` rather than the button's own last
+    // attribute, so the label matches reality even before anyone has
+    // clicked it: the chant starts unmuted, so the button starts saying so.
+    const syncSound = () => {
+      const muted = arena.chant.muted;
       sound.setAttribute("aria-pressed", muted ? "false" : "true");
-      sound.textContent = muted ? "Sound on" : "Sound off";
-      arena.chant.setMuted(!muted);
+      sound.textContent = muted ? "Sound off" : "Sound on";
+    };
+    sound.addEventListener("click", () => {
+      arena.chant.setMuted(!arena.chant.muted);
+      syncSound();
     });
+    syncSound();
   }
 
   for (const button of document.querySelectorAll("#difficulty button")) {

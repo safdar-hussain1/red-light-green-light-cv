@@ -79,7 +79,11 @@ class RefereeLab {
     this.config = data.config;
     this.traces = data.benchmark.traces;
     this.chosenFlow = data.benchmark.chosen_thresholds.flow;
-    this.threshold = this.traces.threshold;
+    // Open at the measured cutoff — the same value "Back to the measured
+    // cutoff" resets to — rather than `traces.threshold`, which is the
+    // difficulty setting the trace *capture* run used and is a different
+    // number.
+    this.threshold = this.chosenFlow;
 
     this.mount = document.getElementById("labPlot");
     this.slider = document.getElementById("labSlider");
@@ -102,6 +106,7 @@ class RefereeLab {
 
     this.drawStatic();
     this.bindDrag();
+    this.bindFocus();
     this.update();
   }
 
@@ -255,26 +260,46 @@ class RefereeLab {
    * was actually doing, not which player they are — so picking one out by
    * eye is hard. Rather than spend four more hues on identity, the tally
    * beside the plot does the picking.
+   *
+   * Bound once, on the tally container, not once per row. `update()`
+   * replaces the tally's row markup on every drag tick — a fresh set of
+   * per-row listeners every tick was ~32 add/removes per `pointermove` for
+   * no benefit `mouseover`/`mouseout` delegation doesn't already give for
+   * free, since both bubble up to a stable ancestor. Delegation also means
+   * a row swapped out mid-hover cannot leave a dangling listener behind —
+   * `applyFocusClasses`, called again at the end of every `update()`, is
+   * what actually guards against a stranded `mount.dataset.focus`: even if
+   * the hovered row is destroyed without ever firing `mouseout` (the
+   * pointer never left the page, only the DOM under it changed), the next
+   * render re-derives the highlighted line from current state rather than
+   * trusting a class that may already be orphaned.
    */
   bindFocus() {
-    for (const row of this.tally.querySelectorAll(".tally-row")) {
-      const key = row.dataset.trace;
-      const focus = () => {
-        this.mount.dataset.focus = key;
-        for (const line of this.svg.querySelectorAll("polyline")) {
-          line.classList.toggle("is-focused", line.dataset.trace === key);
-        }
-      };
-      const blur = () => {
-        delete this.mount.dataset.focus;
-        for (const line of this.svg.querySelectorAll("polyline")) {
-          line.classList.remove("is-focused");
-        }
-      };
-      row.addEventListener("mouseenter", focus);
-      row.addEventListener("focusin", focus);
-      row.addEventListener("mouseleave", blur);
-      row.addEventListener("focusout", blur);
+    if (!this.tally) return;
+    const rowFor = (event) => event.target.closest(".tally-row");
+
+    const focus = (event) => {
+      const row = rowFor(event);
+      if (!row) return;
+      this.mount.dataset.focus = row.dataset.trace;
+      this.applyFocusClasses(row.dataset.trace);
+    };
+    const blur = (event) => {
+      if (!rowFor(event)) return;
+      delete this.mount.dataset.focus;
+      this.applyFocusClasses(null);
+    };
+
+    this.tally.addEventListener("mouseover", focus);
+    this.tally.addEventListener("focusin", focus);
+    this.tally.addEventListener("mouseout", blur);
+    this.tally.addEventListener("focusout", blur);
+  }
+
+  /** Apply (or clear) `.is-focused` on the traces matching `key`. */
+  applyFocusClasses(key) {
+    for (const line of this.svg.querySelectorAll("polyline")) {
+      line.classList.toggle("is-focused", key !== null && line.dataset.trace === key);
     }
   }
 
@@ -324,7 +349,12 @@ class RefereeLab {
     this.calls.innerHTML = dots.join("");
     if (this.tally) {
       this.tally.innerHTML = rows.join("");
-      this.bindFocus();
+      // Rows were just replaced; the delegated listeners on `this.tally`
+      // still work (they never targeted the old nodes), but re-derive the
+      // highlight from `mount.dataset.focus` rather than trust whatever
+      // classes happen to still be on the (recreated) polylines — this is
+      // what recovers from a hover left stranded by the row swap.
+      this.applyFocusClasses(this.mount.dataset.focus || null);
     }
 
     if (this.headline) {
@@ -455,6 +485,12 @@ class NaiveExhibits {
 
     const first = document.getElementById("bgFirst");
     if (first) first.querySelector(".v").textContent = isolated.first_crossing_s.toFixed(1) + "s";
+
+    const perBox = document.getElementById("bgPerBox");
+    if (perBox) {
+      perBox.querySelector(".v").textContent =
+        isolated.per_box_flagged_pct.diff_norm.toFixed(2) + "%";
+    }
 
     const limitation = document.getElementById("bgLimitation");
     if (limitation) {
