@@ -214,8 +214,12 @@ on new footage that nobody propagated fails loudly.
 **The moving class is people walking continuously.** Its 1st percentile is
 not the faintest real motion a player can make — someone shifting their
 weight scores far below anyone in this footage — so these cutoffs err
-strict. The browser offers `forgiving` (2x) and `ruthless` (0.6x)
-multipliers on top of the measured one for that reason.
+strict, and they were measured on stable crops of a courtyard rather than
+on anybody standing in a living room. The browser therefore treats the
+measured number as the *strictest* setting on offer rather than the natural
+one: `ruthless` is 1.0x, `standard` — the default — is 2.0x, and
+`forgiving` is 4.0x. See § 7 for what a real camera adds that this footage
+did not.
 
 ### Hysteresis
 
@@ -337,6 +341,44 @@ chosen against this noise level.
   the judge never scores; a box that wobbles is motion the judge sees. The
   15-frame miss budget is what stands between a brief occlusion and being
   removed from the arena.
+- **The browser scored its own detector, and a player caught it.** Standing
+  perfectly still in front of a webcam got people called out. The judge was
+  not at fault — on stable crops it flags nothing, 0.00% across 4410 frozen
+  samples. The crop was. Pose landmarks move a couple of pixels every frame
+  even on someone who does not, the box comes fresh from those landmarks
+  each frame, and a 96 x 96 window cut from a box that shifted is a window
+  whose contents shifted. The benchmark could never have shown this: its
+  frozen class scores one box against itself. Three things now stand
+  between the wobble and a verdict.
+  - **A smoothed scoring rectangle.** Each player's crop rectangle is an
+    exponential moving average of their reported boxes, weight 0.3 on the
+    newest, so one frame's wobble moves the window by a fraction of itself.
+  - **A pinned rectangle whenever stillness is being asked for.** Smoothing
+    shrinks jitter and does not remove it, so through the countdown and
+    through every red light — grace included — each player's scoring
+    rectangle is held exactly where it was when that phase opened. A still
+    player's window is then pixel-identical frame to frame and the only
+    thing that can change inside it is the player. It follows them again
+    under green, where everyone is walking. Pinning does not blind the
+    referee to somebody who genuinely walks during red: the rectangle sits
+    around where their body *was*, so the moment they move, body pixels
+    leave it and background arrives — measured on the stubbed play path at
+    4.744 body-fractions/s for a walker against 0.000 for the statue beside
+    them.
+  - **A cutoff measured on the player's own camera.** During the countdown
+    every registered player's stabilized crop is scored and the results are
+    collected, never judged. The cutoff becomes
+    `max(preset, 3 x p95_of_the_baseline)`. A player with fewer than three
+    samples is left out, and so is one whose own baseline already exceeds
+    the preset — that is movement, not noise, and admitting it would let
+    anyone buy an uncrossable cutoff by waving through the countdown. If
+    that leaves nobody, the preset stands and the page says so. The arena
+    prints the result under the meters rather than adjusting the game
+    silently.
+- **What calibration cannot see.** Three seconds of countdown measures the
+  room's noise floor and the player's own breathing at rest. It does not
+  measure a cloud crossing the window at minute four, an auto-exposure
+  step, or somebody walking behind the players later in the match.
 - **Browser identity.** Overlap matching, greedy, best pair first. Enough
   for four players standing in a row; it is not re-identification. Two
   players who swap places while crossing swap ids, and the referee would

@@ -234,6 +234,114 @@ class BoxTracker {
   }
 }
 
+/** Weight on the newest box when smoothing a player's scoring rectangle. */
+const BOX_SMOOTHING = 0.3;
+
+/** One box eased toward another, corner by corner. */
+function easeBox(previous, next, alpha) {
+  return {
+    x1: previous.x1 + (next.x1 - previous.x1) * alpha,
+    y1: previous.y1 + (next.y1 - previous.y1) * alpha,
+    x2: previous.x2 + (next.x2 - previous.x2) * alpha,
+    y2: previous.y2 + (next.y2 - previous.y2) * alpha,
+  };
+}
+
+/**
+ * Decides which rectangle each player is actually scored through.
+ *
+ * This exists because of a bug a real player found: standing perfectly still
+ * got them called out. The judge was not at fault — on stable crops it flags
+ * nothing. The crop was. Landmarks wobble by a couple of pixels every frame
+ * even on a statue, the box is derived fresh from those landmarks on every
+ * one of them, and a 96x96 window cut from a box that moved is a window
+ * whose *contents* moved. The referee was measuring its own detector.
+ *
+ * Two guards, in order.
+ *
+ * **Smoothing.** Each player's rectangle is an exponential moving average of
+ * the boxes reported for them, so a single frame's wobble moves the window
+ * by a fraction of itself instead of all of it.
+ *
+ * **Freezing.** Smoothing shrinks jitter; it does not remove it. So whenever
+ * the players are supposed to be standing still — the countdown and every
+ * red light, grace included — each player's scoring rectangle is pinned
+ * where it was when that phase began and does not move again until the light
+ * turns green. A still player's window is then pixel-identical frame to
+ * frame, and the only thing that can change inside it is the player.
+ *
+ * Freezing does not blind the referee to a player who genuinely walks during
+ * red. The rectangle is pinned around where their body *was*, so the moment
+ * they move, body pixels leave that region and background arrives in its
+ * place — a large change, inside the frozen window, in exactly the direction
+ * that gets them called. If anything a pinned rectangle is the more sensitive
+ * of the two: a rectangle that follows a walker partly cancels their
+ * translation, which is the classic way a box tracker makes walking look
+ * like standing.
+ */
+class BoxStabilizer {
+  /** @param {number} alpha Weight on the newest box, in (0, 1]. */
+  constructor(alpha = BOX_SMOOTHING) {
+    this.alpha = alpha;
+    /** @type {Map<number, object>} Smoothed box per player, always current. */
+    this._smooth = new Map();
+    /** @type {Map<number, object>} Pinned rectangle per player, while held. */
+    this._held = new Map();
+  }
+
+  /**
+   * Fold this frame's tracks in and hand back the rectangle to score each by.
+   *
+   * @param {Array<{id: number, box: object}>} tracks Live tracks this frame.
+   * @param {boolean} hold True while scoring rectangles must not move.
+   * @returns {Map<number, object>} Player id to the rectangle to crop.
+   */
+  update(tracks, hold) {
+    const live = new Set();
+    for (const track of tracks) {
+      live.add(track.id);
+      const previous = this._smooth.get(track.id);
+      // Smoothing runs even while frozen. The pinned rectangle is what gets
+      // scored, but the smoothed one has to be current the moment the light
+      // turns green, or the box would snap across the stage.
+      this._smooth.set(
+        track.id,
+        previous === undefined ? { ...track.box } : easeBox(previous, track.box, this.alpha)
+      );
+    }
+
+    for (const id of Array.from(this._smooth.keys())) {
+      if (live.has(id)) continue;
+      this._smooth.delete(id);
+      this._held.delete(id);
+    }
+
+    if (!hold) this._held.clear();
+
+    const rects = new Map();
+    for (const id of live) {
+      if (hold && !this._held.has(id)) {
+        // First frame of the hold, or a player who arrived mid-hold: pin them
+        // where they are now.
+        this._held.set(id, { ...this._smooth.get(id) });
+      }
+      rects.set(id, hold ? this._held.get(id) : this._smooth.get(id));
+    }
+    return rects;
+  }
+
+  /** A player's smoothed box — what to draw, which follows them under any light. */
+  smoothed(trackId) {
+    return this._smooth.get(trackId) || null;
+  }
+
+  /** Forget every player, ready for a fresh match. */
+  reset() {
+    this._smooth.clear();
+    this._held.clear();
+  }
+}
+
 /**
  * Cut one player's box out of the frame as a 96x96 grayscale window.
  *
@@ -274,9 +382,12 @@ if (typeof module !== "undefined" && module.exports) {
     POSE_MODEL_URL,
     MAX_POSES,
     BOX_PAD,
+    BOX_SMOOTHING,
     boxFromLandmarks,
     iou,
+    easeBox,
     BoxTracker,
+    BoxStabilizer,
     cropWindow,
     createPoseSource,
   };

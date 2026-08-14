@@ -25,14 +25,36 @@
  * **The clock is `performance.now()`**, which is monotonic. A wall clock can
  * step backwards — an NTP correction mid-match is enough — and a negative dt
  * would make `diffScoreWindow` throw rather than quietly score.
+ *
+ * **The window a player is scored through is not the box drawn around them.**
+ * `BoxStabilizer` smooths it, and pins it still for the countdown and every
+ * red light, so detector wobble cannot be mistaken for a player moving. That
+ * mistake is what this arena shipped with, and `site/pose.js` explains the
+ * mechanism at length.
  */
 
-/** Multipliers on the measured diff threshold, offered as difficulty. */
+/**
+ * Multipliers on the lab-measured cutoff, offered as difficulty.
+ *
+ * The measured number — the midpoint between the walking class and the held
+ * class on the benchmark footage — is 1.0x, and it is offered as *Ruthless*
+ * rather than as the default. It was measured on stable crops of people
+ * walking continuously, and neither half of that describes a living room: a
+ * real player breathes, sways, and is lit by whatever is in the room. So the
+ * default carries real headroom over the lab number, and the page says which
+ * is which instead of implying the lab number is the natural setting.
+ */
 const DIFFICULTY = Object.freeze({
-  forgiving: 2.0,
-  standard: 1.0,
-  ruthless: 0.6,
+  forgiving: 4.0,
+  standard: 2.0,
+  ruthless: 1.0,
 });
+
+/** Headroom over the noise floor measured on the player's own camera. */
+const CAL_MARGIN = 3.0;
+
+/** Baseline samples a player needs before their camera has been measured. */
+const CAL_MIN_SAMPLES = 3;
 
 /** How long at least one player must be in frame before the countdown opens. */
 const REGISTRATION_HOLD_S = 1.0;
@@ -197,6 +219,23 @@ function fmt(value, digits = 2) {
 }
 
 /**
+ * Linearly interpolated percentile of a set of samples.
+ *
+ * Used on the countdown's baseline scores, where the point of reaching for a
+ * p95 rather than a max is that one cough, one passing car headlight or one
+ * dropped frame should not set the cutoff for the whole match.
+ */
+function percentile(values, q) {
+  if (values.length === 0) return 0;
+  const sorted = Array.from(values).sort((a, b) => a - b);
+  const rank = (sorted.length - 1) * q;
+  const low = Math.floor(rank);
+  const high = Math.ceil(rank);
+  if (low === high) return sorted[low];
+  return sorted[low] + (sorted[high] - sorted[low]) * (rank - low);
+}
+
+/**
  * A player's recent scores as a sparkline, with the threshold drawn across.
  *
  * This is the "why" behind a call: not a verdict restated, but the actual
@@ -277,7 +316,12 @@ class Arena {
     this.chant = new ChantPlayer(data.chant);
 
     this.difficulty = "standard";
-    this.threshold = this.config.diffThreshold;
+    this.threshold = this.config.diffThreshold * DIFFICULTY.standard;
+    /** Noise floor measured on this camera during the countdown, or null. */
+    this.calibration = null;
+    /** Baseline scores collected per player while the countdown runs. */
+    this.baselines = new Map();
+    this.calibrationDone = false;
     this.judge = new MotionJudge(
       this.threshold,
       this.config.confirmFrames,
@@ -285,6 +329,7 @@ class Arena {
     );
     this.sampler = new FrameSampler(this.config.sampleIntervalS);
     this.tracker = new BoxTracker();
+    this.stabilizer = new BoxStabilizer();
     this.game = null;
     this.poseSource = null;
     this.stream = null;
@@ -393,9 +438,16 @@ class Arena {
     this.game = null;
     this.registrationSince = null;
     this.tracker.reset();
+    this.stabilizer.reset();
     this.judge.reset();
     this.sampler.reset();
     this.traces.clear();
+    // Every match measures the room it is played in from scratch. The lamp
+    // may have been switched off since the last one.
+    this.baselines.clear();
+    this.calibration = null;
+    this.calibrationDone = false;
+    this.applyThreshold();
     this.setPhase("LOBBY");
     this.setPhaseSub("Step into frame");
     this.setStatus("Waiting for a player to stand in frame.");
@@ -471,7 +523,16 @@ class Arena {
     }
 
     const { tracks, lost } = this.tracker.update(boxes, now);
-    const violations = this.score(tracks, now);
+
+    // Scoring rectangles hold still through the countdown and every red
+    // light — the two stretches where a player is being asked not to move,
+    // and so the two stretches where the window they are measured in must
+    // not move either. Under green they follow, because everybody is walking
+    // and a pinned window would lose them.
+    const phase = this.game ? this.game.phase : "LOBBY";
+    const hold = phase === "RED" || phase === "COUNTDOWN";
+    const rects = this.stabilizer.update(tracks, hold);
+    const violations = this.score(tracks, rects, now);
 
     if (this.game === null) {
       this.awaitRegistration(tracks, now);
@@ -486,12 +547,16 @@ class Arena {
   /**
    * Crop every tracked player, pace them onto the referee's clock, score.
    *
+   * @param {Array<object>} tracks Live tracks this frame.
+   * @param {Map<number, object>} rects The stabilized rectangle to score each by.
    * @returns {Array<number>} Ids the judge has now confirmed are moving.
    */
-  score(tracks, now) {
+  score(tracks, rects, now) {
     const crops = {};
     for (const track of tracks) {
-      const window96 = cropWindow(this.video, track.box, this.cropCtx);
+      const rect = rects.get(track.id);
+      if (!rect) continue;
+      const window96 = cropWindow(this.video, rect, this.cropCtx);
       if (window96) crops[track.id] = window96;
     }
 
@@ -506,6 +571,11 @@ class Arena {
     // into the armed window and trigger a call the instant grace ends,
     // which defeats the point of having grace at all.
     const armed = this.game ? this.game.armed(now) : false;
+    // The countdown is the one stretch of a match where every player is
+    // standing set and nothing is at stake, which makes it the only honest
+    // chance to measure what this camera reads on somebody holding still.
+    // These scores are collected, never judged.
+    const calibrating = this.game !== null && this.game.phase === "COUNTDOWN";
 
     const violations = [];
     for (const key of Object.keys(pair.cur)) {
@@ -516,6 +586,7 @@ class Arena {
       // this line about *displaying* a score should depend on whether the
       // light happens to be armed right now.
       const score = diffScoreWindow(previous, pair.cur[key], pair.dt);
+      if (calibrating) this.noteBaseline(id, score);
       if (armed && this.judge.update(id, score)) violations.push(id);
 
       let trace = this.traces.get(id);
@@ -564,6 +635,11 @@ class Arena {
         // phase inherits the previous one's baseline.
         this.judge.reset();
         this.sampler.reset();
+        // A match always opens on green, and the countdown is what precedes
+        // it — so the first green light is both the last moment the baseline
+        // is complete and the first moment the cutoff it produces matters.
+        // Later greens find the calibration already done and cost nothing.
+        if (event.phase === "GREEN") this.finishCalibration();
         this.setPhase(event.phase);
 
         if (event.phase === "GREEN") {
@@ -613,7 +689,9 @@ class Arena {
       sparkline(trace, this.threshold);
 
     this.setStatus("Player " + event.trackId + " eliminated: " + reason + ".");
-    Probe.note("eliminated");
+    // The id, not just the fact. `scripts/verify_site.py` runs a walker and a
+    // statue side by side and has to be able to tell which of them was called.
+    Probe.note("out:" + event.trackId);
   }
 
   endMatch(phase) {
@@ -674,13 +752,19 @@ class Arena {
         this.overlay.appendChild(node);
       }
 
+      // The drawn box is the smoothed one, never the pinned one. It follows
+      // the player under every light, so nobody has to wonder why the outline
+      // stopped tracking them — while what they are actually *scored* through
+      // holds still underneath.
+      const drawn = this.stabilizer.smoothed(track.id) || track.box;
+
       // The video is mirrored for the player's benefit, so the overlay has to
       // be mirrored with it — but by arithmetic, not by a transform, or every
       // label would come out backwards.
-      node.style.left = fmt((1 - track.box.x2) * 100, 2) + "%";
-      node.style.top = fmt(track.box.y1 * 100, 2) + "%";
-      node.style.width = fmt((track.box.x2 - track.box.x1) * 100, 2) + "%";
-      node.style.height = fmt((track.box.y2 - track.box.y1) * 100, 2) + "%";
+      node.style.left = fmt((1 - drawn.x2) * 100, 2) + "%";
+      node.style.top = fmt(drawn.y1 * 100, 2) + "%";
+      node.style.width = fmt((drawn.x2 - drawn.x1) * 100, 2) + "%";
+      node.style.height = fmt((drawn.y2 - drawn.y1) * 100, 2) + "%";
 
       const player = this.game ? this.game.players.get(track.id) : null;
       const smoothed = this.judge.smoothed(track.id);
@@ -773,25 +857,126 @@ class Arena {
     );
   }
 
-  /* --------------------------------------------------------- difficulty */
+  /* ------------------------------------------ difficulty and calibration */
 
   setDifficulty(name) {
     this.difficulty = name;
-    this.threshold = this.config.diffThreshold * DIFFICULTY[name];
-    this.judge.threshold = this.threshold;
-
-    const note = el("difficultyNote");
-    if (note) {
-      const scale = DIFFICULTY[name];
-      note.textContent =
-        "threshold " + fmt(this.threshold, 4) + " body-fractions/s" +
-        (scale === 1
-          ? " — the measured default"
-          : " (" + fmt(scale, 1) + "x the measured default)");
-    }
+    this.applyThreshold();
     for (const button of document.querySelectorAll("#difficulty button")) {
       button.setAttribute("aria-pressed", button.dataset.level === name ? "true" : "false");
     }
+  }
+
+  /** The chosen preset, before this camera has had anything to say about it. */
+  get presetThreshold() {
+    return this.config.diffThreshold * DIFFICULTY[this.difficulty];
+  }
+
+  /**
+   * Set the live cutoff from the preset and whatever calibration measured.
+   *
+   * The preset is a floor, never a ceiling: calibration can only ever raise
+   * the cutoff. A camera quieter than the lab footage does not earn a
+   * stricter game than the player asked for. And because a baseline is only
+   * ever admitted from a player who was already under the preset,
+   * `CAL_MARGIN` times it can never exceed three times the preset — the
+   * calibrated cutoff is bounded without needing a second knob to bound it.
+   */
+  applyThreshold() {
+    const preset = this.presetThreshold;
+    let threshold = preset;
+    if (this.calibration !== null) {
+      threshold = Math.max(preset, CAL_MARGIN * this.calibration);
+    }
+    this.threshold = threshold;
+    this.judge.threshold = threshold;
+    this.renderThresholdNotes();
+  }
+
+  /** Keep one countdown sample for a player. */
+  noteBaseline(id, score) {
+    let scores = this.baselines.get(id);
+    if (!scores) {
+      scores = [];
+      this.baselines.set(id, scores);
+    }
+    scores.push(score);
+  }
+
+  /**
+   * Turn the countdown's baseline scores into a cutoff for this camera.
+   *
+   * Per player, the 95th percentile of what their own crop scored; across
+   * players, the largest of those, because the cutoff is one number for the
+   * whole match and the noisiest crop in the room is the one that would
+   * produce the first wrong call.
+   *
+   * Two players are left out of that maximum rather than trusted.
+   *
+   * One who contributed fewer than `CAL_MIN_SAMPLES` samples has measured
+   * nothing — they walked into a countdown that was nearly over.
+   *
+   * One whose baseline is already past the preset cutoff was *moving*, and
+   * movement is not noise. Admitting them would let anyone buy a cutoff
+   * nothing could cross by waving through the countdown, and would hand the
+   * whole room a threshold set by the least still person in it. A noise
+   * floor is a property of the camera and the light, and the players who
+   * were genuinely still are the ones who reveal it.
+   *
+   * If that leaves nobody, the preset stands unchanged and the page says so
+   * rather than implying a measurement that never happened.
+   */
+  finishCalibration() {
+    if (this.calibrationDone) return;
+    this.calibrationDone = true;
+
+    const preset = this.presetThreshold;
+    let floor = null;
+    for (const scores of this.baselines.values()) {
+      if (scores.length < CAL_MIN_SAMPLES) continue;
+      const p95 = percentile(scores, 0.95);
+      if (p95 >= preset) continue;
+      floor = floor === null ? p95 : Math.max(floor, p95);
+    }
+    this.calibration = floor;
+    this.applyThreshold();
+  }
+
+  /** The two lines that tell a player what number they are being held to. */
+  renderThresholdNotes() {
+    const scale = DIFFICULTY[this.difficulty];
+    const note = el("difficultyNote");
+    if (note) {
+      note.textContent =
+        "cutoff " + fmt(this.presetThreshold, 4) + " body-fractions/s — " +
+        (scale === 1
+          ? "the lab-measured midpoint"
+          : fmt(scale, 1) + "x the lab-measured midpoint of " +
+            fmt(this.config.diffThreshold, 4));
+    }
+
+    const live = el("calibrationNote");
+    if (!live) return;
+    if (!this.calibrationDone) {
+      live.textContent =
+        "The countdown measures what your camera reads on a player standing " +
+        "still, and lifts the cutoff if it has to.";
+      return;
+    }
+    if (this.calibration === null) {
+      live.textContent =
+        "Nobody held still long enough during the countdown to measure your " +
+        "camera. Cutoff " + fmt(this.threshold, 4) + ", straight from the preset.";
+      return;
+    }
+    const raised = this.threshold > this.presetThreshold + 1e-12;
+    live.textContent =
+      "Calibrated to your camera: cutoff " + fmt(this.threshold, 4) +
+      (raised
+        ? ", raised from " + fmt(this.presetThreshold, 4) + " to clear a noise floor of " +
+          fmt(this.calibration, 4) + "."
+        : ". Your noise floor measured " + fmt(this.calibration, 4) +
+          ", well under the preset.");
   }
 
   /* -------------------------------------------------------------- replay */

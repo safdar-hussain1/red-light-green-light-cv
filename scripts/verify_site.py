@@ -18,9 +18,17 @@ of it that swaps `navigator.mediaDevices.getUserMedia` for a
 `window.RL_POSE_FACTORY` — the seam `site/pose.js` documents — so no wasm
 blob has to be fetched. Everything downstream of those two substitutions is
 the real thing: the real crop path, the real sampler, the real judge, the
-real game machine. The page records the phases it passed through in its own
-title under `?probe=1`, which is the one piece of state a `--dump-dom` run
-can read back.
+real game machine. The page records the phases it passed through, and every
+call it made, in its own title under `?probe=1` — the one piece of state a
+`--dump-dom` run can read back.
+
+The synthetic footage draws two people: one who walks and one who does not
+move a pixel, both with speckled skin and both with a seeded plus or minus
+2 px of jitter on the box the fake pose runtime reports. That jitter is the
+point. Landmarks wobble on a real camera, and a crop window cut from a
+wobbling box slides across a stationary body, which reads as movement. The
+run asserts both halves of the referee: the walker is called out, and the
+still one survives two whole red lights.
 
 Getting a `--dump-dom` to happen *late* takes a trick, because the dump
 fires on the load event and `--virtual-time-budget` — the usual way to wait
@@ -91,12 +99,14 @@ layout cropped to 390, which photographs as a broken page. 500 is inside the
 page's narrow breakpoint, so this is still the phone layout.
 """
 
-HOLD_MS = 9000
+HOLD_MS = 13000
 """How long the server holds the injected image open, delaying the load event.
 
-Long enough for registration (1 s), the countdown (3 s) and a green light to
-arrive with room to spare — the phase lengths are drawn from a PRNG, so the
-margin is deliberate.
+The run has to cover registration (1 s), the countdown (3 s) and then two
+complete red lights, because one red light cannot tell the difference
+between a player who is holding still and a player who has not been armed
+against yet. The stub pins both ends of the phase length at 1.5 s, so the
+second red light closes at about 10.3 s and this leaves the margin.
 """
 
 # A 1x1 transparent GIF. The response body has to be a real image or Chrome
@@ -111,41 +121,94 @@ INJECTION = """
 /*
  * Verification stubs. Injected by scripts/verify_site.py, never shipped.
  *
- * Two substitutions, both at the edge of the system: the camera, and the
- * pose runtime. Everything between them and the verdict is the real code.
+ * Three substitutions, all at the edge of the system: the camera, the pose
+ * runtime, and the length of a light. Everything between them and the
+ * verdict is the real code — the real crop path, the real sampler, the real
+ * judge, the real rules.
+ *
+ * The footage is built to answer the one question the unit tests cannot ask:
+ * does somebody who is genuinely holding still survive a red light in a
+ * browser? So it draws two people. The left one walks. The right one does
+ * not move a single pixel, ever. Both carry a fixed speckled texture,
+ * because a flat rectangle cannot reveal a crop window that slipped
+ * sideways — and sliding sideways is exactly what the crop window used to
+ * do, because both figures' detection boxes are handed a seeded plus or
+ * minus 2 px of jitter on every frame. That is what pose landmarks actually
+ * do on a real camera, and scoring a statue through a box that moves is how
+ * a statue used to get called for moving.
  */
 (function () {
+  var FRAME_W = 640;
+  var FRAME_H = 480;
+
+  /* Landmark wobble, in frame pixels, applied to every reported box. */
+  var JITTER_PX = 2;
+
   var canvas = document.createElement("canvas");
-  canvas.width = 640;
-  canvas.height = 480;
+  canvas.width = FRAME_W;
+  canvas.height = FRAME_H;
   var ctx = canvas.getContext("2d");
   var frame = 0;
 
-  // Synthetic footage: a textured figure that actually moves, so the diff
-  // score is a real number rather than a flat zero.
+  // Seeded, both of them. A verification that fails one run in five proves
+  // nothing at all, and this is the same generator the game draws its light
+  // schedule from.
+  function mulberry32(seed) {
+    var a = seed >>> 0;
+    return function () {
+      a = (a + 0x6d2b79f5) >>> 0;
+      var t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  var texture = mulberry32(1789);
+  var wobble = mulberry32(9041);
+
+  // Two bodies. `sway` is how far the figure actually walks: the second one
+  // is pinned at zero and must survive every red light in the run.
+  var FIGURES = [
+    { home: 90, top: 150, w: 110, h: 240, head: 40, skin: "#d9cfbe", sway: 40, dots: [] },
+    { home: 400, top: 160, w: 100, h: 230, head: 38, skin: "#c9d6cf", sway: 0, dots: [] },
+  ];
+
+  // Markings are drawn once and then belong to the body. A figure that
+  // re-randomises its own pixels every frame is not a person standing
+  // still, and no amount of crop stabilisation could rescue one.
+  FIGURES.forEach(function (fig) {
+    for (var i = 0; i < 260; i += 1) {
+      fig.dots.push({
+        dx: Math.round(texture() * (fig.w - 4)),
+        dy: Math.round(texture() * (fig.h - 4)),
+        shade: i % 2 ? "#2b2b2b" : "#f2f2f2",
+      });
+    }
+  });
+
+  function offsetOf(fig) {
+    return fig.sway ? Math.round(Math.sin(frame / 11) * fig.sway) : 0;
+  }
+
   function draw() {
     frame += 1;
     ctx.fillStyle = "#1d2b33";
-    ctx.fillRect(0, 0, 640, 480);
+    ctx.fillRect(0, 0, FRAME_W, FRAME_H);
     ctx.fillStyle = "#33454f";
-    ctx.fillRect(0, 360, 640, 120);
+    ctx.fillRect(0, 360, FRAME_W, 120);
 
-    var x = 90 + Math.sin(frame / 11) * 40;
-    ctx.fillStyle = "#d9cfbe";
-    ctx.fillRect(x, 150, 110, 240);
-    ctx.beginPath();
-    ctx.arc(x + 55, 128, 40, 0, 6.3);
-    ctx.fill();
-    for (var i = 0; i < 260; i += 1) {
-      ctx.fillStyle = i % 2 ? "#2b2b2b" : "#f2f2f2";
-      ctx.fillRect(x + Math.random() * 110, 150 + Math.random() * 240, 4, 4);
-    }
-
-    ctx.fillStyle = "#c9d6cf";
-    ctx.fillRect(400, 160, 100, 230);
-    ctx.beginPath();
-    ctx.arc(450, 138, 38, 0, 6.3);
-    ctx.fill();
+    FIGURES.forEach(function (fig) {
+      var x = fig.home + offsetOf(fig);
+      ctx.fillStyle = fig.skin;
+      ctx.fillRect(x, fig.top, fig.w, fig.h);
+      ctx.beginPath();
+      ctx.arc(x + fig.w / 2, fig.top - 22, fig.head, 0, 6.3);
+      ctx.fill();
+      fig.dots.forEach(function (dot) {
+        ctx.fillStyle = dot.shade;
+        ctx.fillRect(x + dot.dx, fig.top + dot.dy, 4, 4);
+      });
+    });
 
     requestAnimationFrame(draw);
   }
@@ -160,16 +223,22 @@ INJECTION = """
   };
 
   // The seam site/pose.js documents: stand in for the wasm pose runtime so
-  // the play path can be exercised with no network at all.
+  // the play path can be exercised with no network at all. The box follows
+  // the body it belongs to, and then wobbles, which is the whole point.
   window.RL_POSE_FACTORY = function () {
     return Promise.resolve({
-      detect: function (video, timestampMs) {
-        var s = timestampMs / 1000;
-        var wobble = Math.sin(s * 5) * 0.045;
-        return [
-          { x1: 0.11 + wobble, y1: 0.22, x2: 0.36 + wobble, y2: 0.86 },
-          { x1: 0.60, y1: 0.24, x2: 0.82, y2: 0.84 },
-        ];
+      detect: function () {
+        return FIGURES.map(function (fig) {
+          var x = fig.home + offsetOf(fig);
+          var jx = (wobble() * 2 - 1) * JITTER_PX;
+          var jy = (wobble() * 2 - 1) * JITTER_PX;
+          return {
+            x1: (x + jx) / FRAME_W,
+            y1: (fig.top - fig.head - 22 + jy) / FRAME_H,
+            x2: (x + fig.w + jx) / FRAME_W,
+            y2: (fig.top + fig.h + jy) / FRAME_H,
+          };
+        });
       },
       close: function () {},
     });
@@ -181,6 +250,16 @@ INJECTION = """
   // its handler, and nothing would happen.
   document.addEventListener("DOMContentLoaded", function () {
     document.documentElement.style.scrollBehavior = "auto";
+
+    // The third substitution. Shipped phase lengths are drawn from 2-5 s,
+    // and two whole red lights have to fit inside the window the held image
+    // keeps the load event open for. Pinning both ends makes the schedule
+    // short and repeatable; not one rule changes.
+    if (window.RL_DATA && window.RL_DATA.config) {
+      window.RL_DATA.config.phaseMinS = 1.5;
+      window.RL_DATA.config.phaseMaxS = 1.5;
+    }
+
     var action = new URLSearchParams(window.location.search).get("action");
     window.setTimeout(function () {
       var target =
@@ -231,13 +310,19 @@ def run_chrome(args: list[str], timeout: float = 120.0) -> subprocess.CompletedP
     )
 
 
-def dump_title(url: str, extra: tuple[str, ...] = ()) -> str:
-    """Load a URL and return the document title it ended up with."""
+def dump_page(url: str, extra: tuple[str, ...] = ()) -> tuple[str, str]:
+    """Load a URL and return its final document title and serialised DOM."""
     result = run_chrome(["--dump-dom", *extra, url])
     match = re.search(r"<title>(.*?)</title>", result.stdout, re.S)
     # `--dump-dom` serialises the DOM, so the title comes back HTML-escaped:
     # the probe writes `A>B>C` and the dump reads `A&gt;B&gt;C`.
-    return html.unescape(match.group(1).strip()) if match else ""
+    title = html.unescape(match.group(1).strip()) if match else ""
+    return title, html.unescape(result.stdout)
+
+
+def dump_title(url: str, extra: tuple[str, ...] = ()) -> str:
+    """Load a URL and return the document title it ended up with."""
+    return dump_page(url, extra)[0]
 
 
 def screenshot(url: str, out: Path, size: tuple[int, int], settle_ms: int | None) -> None:
@@ -319,21 +404,55 @@ def check_selftest(report: list) -> bool:
     return ok
 
 
+def calibration_line(dom: str) -> str:
+    """The calibration sentence the arena wrote under the meters, if any."""
+    match = re.search(r'id="calibrationNote"[^>]*>(.*?)</p>', dom, re.S)
+    return re.sub(r"\s+", " ", match.group(1)).strip() if match else ""
+
+
 def check_play_path(report: list, shots: bool) -> bool:
-    """Play, with a fake camera and a fake pose source, reaches a green light."""
+    """Play, with a fake camera and a fake pose source, referees both players.
+
+    The stub's two figures are the whole assertion. Player 1 walks and has to
+    be called out — a referee that never calls anybody is not a referee.
+    Player 2 stands perfectly still through two armed red lights while its
+    detection box wobbles by a couple of pixels a frame, and has to survive
+    both — a referee that calls a statue is not one either.
+    """
     with tempfile.TemporaryDirectory(prefix="rl-site-") as tmp:
         root = Path(tmp)
         stubbed_page(root / "index.html")
         httpd, port = serve(root)
         try:
             base = f"http://127.0.0.1:{port}/index.html?probe=1"
-            title = dump_title(f"{base}&theme=dark")
+            title, dom = dump_page(f"{base}&theme=dark")
             phases = title.replace("PROBE ", "").split(">")
 
             reached_countdown = "COUNTDOWN" in phases
             reached_green = "GREEN" in phases
+            two_reds = phases.count("RED") >= 2
+            mover_called = "out:1" in phases
+            still_survived = "out:2" not in phases
+            calibrated = "Calibrated to your camera" in dom
+
             report.append(("play path reaches a countdown", reached_countdown, title))
             report.append(("play path reaches a green light", reached_green, title))
+            report.append(("play path covers two red lights", two_reds, title))
+            report.append(("a walking player is called out", mover_called, title))
+            report.append(
+                (
+                    "a still player survives both red lights",
+                    still_survived,
+                    title,
+                )
+            )
+            report.append(
+                (
+                    "the cutoff is calibrated on the countdown",
+                    calibrated,
+                    calibration_line(dom) or "no calibration line in the page",
+                )
+            )
 
             # The no-camera path has to work too, and it shares the phase
             # machinery — so it is worth its own run rather than an assumption.
@@ -342,7 +461,15 @@ def check_play_path(report: list, shots: bool) -> bool:
             replayed = "replay" in replay_phases and "RED" in replay_phases
             report.append(("replay runs without a camera", replayed, replay_title))
 
-            ok = reached_countdown and reached_green and replayed
+            ok = (
+                reached_countdown
+                and reached_green
+                and two_reds
+                and mover_called
+                and still_survived
+                and calibrated
+                and replayed
+            )
 
             if shots:
                 for theme in ("light", "dark"):

@@ -308,8 +308,18 @@ Every one of these is measured or reproducible, not hypothetical.
 - **The moving class is people walking continuously.** Its 1st percentile is
   not the faintest motion a real player can make — someone shifting their
   weight scores far below anyone in this footage. The measured cutoffs
-  therefore err strict. The browser offers forgiving (2x) and ruthless
-  (0.6x) presets on top of the measured one for exactly that reason.
+  therefore err strict, and they were taken on stable crops rather than on
+  anyone standing in a living room. The browser treats the measured number
+  as its strictest setting for that reason: ruthless is 1.0x, standard —
+  the default — is 2.0x, forgiving is 4.0x, and the countdown lifts the
+  cutoff further if the player's own camera turns out to be noisier than
+  the footage was.
+- **A wobbling box used to be scored as a moving player.** Pose landmarks
+  shift a couple of pixels every frame even on somebody holding perfectly
+  still, and a crop window cut from that box shifts with it. The browser now
+  smooths each player's scoring rectangle and pins it in place through the
+  countdown and every red light, so a still player's window does not move.
+  `docs/DESIGN.md` § 7 has the mechanism and the numbers.
 - **Identity in the browser is overlap matching, not re-identification.**
   Two players who swap places while crossing will swap ids, and the referee
   would then judge them as each other. In a game where everyone is standing
