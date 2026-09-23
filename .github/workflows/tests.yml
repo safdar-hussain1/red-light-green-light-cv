@@ -31,15 +31,15 @@ jobs:
         python-version: ["3.12", "3.13"]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
           cache-dependency-path: pyproject.toml
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
 
@@ -56,3 +56,10 @@ jobs:
 
       - name: Run the suite
         run: pytest -rs
+
+      # The published page is a build artefact committed on purpose. Build it
+      # again here and fail if the result differs from the committed file.
+      - name: Check the committed page matches a fresh build
+        run: |
+          redlight build-site
+          git diff --exit-code -- docs/
