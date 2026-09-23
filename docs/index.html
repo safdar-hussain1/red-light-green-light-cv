@@ -4602,36 +4602,31 @@ const METER_SCALE = 2.0;
 const RING_CIRCUMFERENCE = 2 * Math.PI * 54;
 
 /**
- * Phases the replay steps through, as fractions of the match duration.
+ * When each light started in the recorded demo match, in match seconds.
  *
- * Chosen to fit the recorded calls at the 12.0 s duration this demo was
- * baked with. Kept as fractions rather than absolute seconds so the last
- * boundary always lands exactly on whatever `duration_s` the baked demo
- * actually ships — `buildReplaySchedule` scales these against it — and a
- * regenerated demo with a different duration cannot leave a slot lookup
- * with nowhere to land.
+ * `docs/demo_match.mp4` is the seeded demo run (seed 3, lights of 1.5 to
+ * 3.0 s). The browser's random number generator is not Python's, so the
+ * schedule cannot be drawn again here from the seed; it is written down
+ * instead, read from that run: each value is the time of the first frame of
+ * a new light minus the game's own time-into-phase on that frame. The first
+ * green starts at 0 and the lights alternate from there.
  */
-const REPLAY_SCHEDULE_FRACTIONS = Object.freeze([
-  { phase: "GREEN", from: 0.0 / 12.0, to: 2.1 / 12.0 },
-  { phase: "RED", from: 2.1 / 12.0, to: 4.5 / 12.0 },
-  { phase: "GREEN", from: 4.5 / 12.0, to: 6.6 / 12.0 },
-  { phase: "RED", from: 6.6 / 12.0, to: 8.8 / 12.0 },
-  { phase: "GREEN", from: 8.8 / 12.0, to: 10.5 / 12.0 },
-  { phase: "RED", from: 10.5 / 12.0, to: 1.0 },
-]);
+const REPLAY_LIGHT_STARTS_S = Object.freeze([1.857, 4.173, 6.228, 8.634, 11.073]);
 
 /**
  * The replay schedule for one match, in seconds.
  *
- * The last slot's `to` is exactly `duration`, so any `matchT` inside
- * `[0, duration)` — the only range the caller ever looks up — is covered.
+ * Green from 0, then alternating at the recorded starts. The last slot's
+ * `to` is exactly `duration`, so any `matchT` inside `[0, duration)` — the
+ * only range the caller ever looks up — is covered.
  */
 function buildReplaySchedule(duration) {
-  return REPLAY_SCHEDULE_FRACTIONS.map((slot) => ({
-    phase: slot.phase,
-    from: slot.from * duration,
-    to: slot.to * duration,
-  }));
+  const edges = [0, ...REPLAY_LIGHT_STARTS_S.filter((t) => t < duration), duration];
+  const slots = [];
+  for (let i = 0; i + 1 < edges.length; i += 1) {
+    slots.push({ phase: i % 2 === 0 ? "GREEN" : "RED", from: edges[i], to: edges[i + 1] });
+  }
+  return slots;
 }
 
 /** How long the arena holds its cold, frozen look at a green-to-red snap. */
@@ -5366,6 +5361,10 @@ class Arena {
           : survivors + " players stood still long enough. The clock ran out first."
         : "Every registered player was called out before the clock ran down."
     );
+    // The engine loop has stopped, so the ring would otherwise hold its last
+    // in-match reading ("1 second left") under the end card. With the game
+    // finished, `renderRing` shows who is left instead; `now` is not read.
+    this.renderRing(0);
     Probe.note("end:" + phase);
   }
 
@@ -5560,7 +5559,7 @@ class Arena {
       const left = this.game.timeLeft(now);
       fraction = left / this.config.durationS;
       value = String(Math.ceil(left));
-      unit = "seconds left";
+      unit = value === "1" ? "second left" : "seconds left";
     } else {
       fraction = 0;
       value = String(this.game.aliveCount);
@@ -5707,16 +5706,22 @@ class Arena {
    * `docs/demo_match.mp4`: real HUD-annotated footage of `redlight play`
    * refereeing the benchmark video, boxes and verdicts and all — not staged,
    * the same run the README's `redlight benchmark` command reproduces. The
-   * second is the older animated data view: the players, the eliminations,
-   * their times and their reasons, read from `RL_DATA.benchmark.demo_match`.
-   * Its light schedule is not recorded, so it is reconstructed here to the
-   * only shape consistent with those calls — every "moved" call lands on an
-   * armed red light, and every phase length stays inside the 1.5–3.0 s
-   * bounds the run was configured with. The page says so where it is shown.
+   * second is an animated data view: the players, the eliminations, their
+   * times and their reasons, read from `RL_DATA.benchmark.demo_match`. Both
+   * use the run's recorded light schedule (`REPLAY_LIGHT_STARTS_S`).
    *
-   * Both views are built every time so switching between them is instant;
-   * only the video actually costs bytes, and it is fetched once and cached
-   * like any other same-origin asset.
+   * While the video is on screen, the video is the clock. The sidebar's
+   * light, doll, ring and roster are all computed from `video.currentTime`,
+   * so a slow first frame, buffering, a pause or a scrub moves them with the
+   * footage instead of letting them run ahead of it. The recording opens in
+   * the lobby: the match was auto-started on the frame where
+   * `auto_start_frames` frames in a row had seen a player (frame 19 at
+   * 10 fps, since every frame of this footage has a walker in it), and the
+   * match clock began `countdown_s` after that. The data view has no footage,
+   * so it runs on the page clock from wherever the video had got to.
+   *
+   * Everything shown is recomputed from the time on every frame rather than
+   * latched, so scrubbing backwards brings eliminated players back.
    */
   startReplay() {
     this.stopReplay();
@@ -5736,6 +5741,10 @@ class Arena {
     const countdown = demo.config.countdown_s;
     const duration = demo.config.duration_s;
     const schedule = buildReplaySchedule(duration);
+    const fps = this.data.benchmark.meta.fps;
+    // Seconds into the recording at which the countdown and the match begin.
+    const countdownAt = (demo.config.auto_start_frames - 1) / fps;
+    const matchAt = countdownAt + countdown;
 
     if (this.idle) this.idle.hidden = true;
     this.endCard.dataset.show = "false";
@@ -5746,7 +5755,7 @@ class Arena {
 
     const tokens = [];
     for (let i = 1; i <= demo.players; i += 1) {
-      tokens.push({ id: i, out: false, reason: null });
+      tokens.push({ id: i, out: false });
     }
 
     const scene = document.createElement("div");
@@ -5760,7 +5769,7 @@ class Arena {
       "</div>" +
       '<div class="replay-view" data-view="video">' +
       '<video class="replay-video" src="demo_match.mp4" poster="demo_poster.jpg" ' +
-      'muted controls loop playsinline></video>' +
+      'muted controls playsinline></video>' +
       '<p class="replay-note">The referee calling a real recorded match: ' +
       "public benchmark footage of pedestrians in a courtyard, playing as the " +
       "runners. Every box, meter and verdict here is the engine's, not staged. " +
@@ -5771,19 +5780,40 @@ class Arena {
       '<div class="replay-field" id="replayField"></div>' +
       '<p class="replay-note">Data replay: ' + demo.players + " players, " +
       demo.eliminations.length + " calls, " + demo.survivors +
-      " left standing. Light schedule reconstructed to fit the recorded calls.</p>" +
+      " left standing, on the recorded light schedule.</p>" +
       "</div>";
     this.overlay.appendChild(scene);
 
     const tabs = scene.querySelectorAll(".replay-tab");
     const views = scene.querySelectorAll(".replay-view");
     const video = scene.querySelector(".replay-video");
+
+    // One timeline for both views, in seconds since the recording began.
+    // The page clock is only used when the video is not on screen (or could
+    // not be played at all); `pageOrigin` is set so that it carries on from
+    // wherever the video was.
+    let view = "video";
+    let pageOrigin = performance.now() / 1000;
+    const videoIsClock = () => view === "video" && video !== null && !video.error;
+    const recordingTime = () =>
+      videoIsClock() ? video.currentTime : performance.now() / 1000 - pageOrigin;
+
     for (const tab of tabs) {
       tab.addEventListener("click", () => {
-        for (const t of tabs) t.setAttribute("aria-pressed", String(t === tab));
-        for (const v of views) v.hidden = v.dataset.view !== tab.dataset.view;
-        if (tab.dataset.view === "video" && video) video.play().catch(() => {});
-        else if (video) video.pause();
+        const next = tab.dataset.view;
+        if (next === view) return;
+        const t = recordingTime();
+        view = next;
+        for (const b of tabs) b.setAttribute("aria-pressed", String(b === tab));
+        for (const v of views) v.hidden = v.dataset.view !== next;
+        if (!video) return;
+        if (next === "video") {
+          if (Number.isFinite(video.duration)) video.currentTime = Math.min(t, video.duration);
+          video.play().catch(() => {});
+        } else {
+          pageOrigin = performance.now() / 1000 - t;
+          video.pause();
+        }
       });
     }
     if (video) video.play().catch(() => {});
@@ -5800,17 +5830,36 @@ class Arena {
       token.node = node;
     }
 
-    const startedAt = performance.now() / 1000;
-    const step = () => {
-      const elapsed = performance.now() / 1000 - startedAt;
-      const matchT = elapsed - countdown;
+    const ring = el("ring");
+    const showRing = (phase, value, unit, fraction) => {
+      if (!ring) return;
+      ring.dataset.phase = phase;
+      el("ringValue").textContent = value;
+      el("ringUnit").textContent = unit;
+      ring.querySelector(".sweep").style.strokeDashoffset = fmt(
+        RING_CIRCUMFERENCE * (1 - Math.max(Math.min(fraction, 1), 0)),
+        2
+      );
+    };
+    const enter = (phase) => {
+      if (this.stage.dataset.phase !== phase) this.setPhase(phase);
+    };
 
-      if (matchT < 0) {
-        this.setPhase("COUNTDOWN");
-        this.setPhaseSub("Countdown");
-      } else if (matchT >= duration) {
+    const step = () => {
+      const matchT = recordingTime() - matchAt;
+
+      if (matchT >= duration) {
+        // The final whistle: the ring stops counting and shows who is left,
+        // the way it does at the end of a live match.
         const outcome = demo.outcome === "victory" ? "VICTORY" : "WIPEOUT";
-        this.setPhase(outcome);
+        enter(outcome);
+        if (this.doll) this.doll.setArmed(false);
+        showRing(
+          outcome,
+          String(demo.survivors),
+          demo.survivors === 1 ? "survivor" : "survivors",
+          0
+        );
         this.showEnd(
           outcome,
           demo.survivors,
@@ -5821,6 +5870,18 @@ class Arena {
         this.replayTimer = null;
         Probe.note("replay-end");
         return;
+      }
+
+      if (matchT < -countdown) {
+        enter("LOBBY");
+        this.setPhaseSub("Registering");
+        if (this.doll) this.doll.setArmed(false);
+        showRing("LOBBY", "–", "waiting", 0);
+      } else if (matchT < 0) {
+        enter("COUNTDOWN");
+        this.setPhaseSub("Countdown");
+        if (this.doll) this.doll.setArmed(false);
+        showRing("COUNTDOWN", String(Math.ceil(-matchT)), "starting", -matchT / countdown);
       } else {
         // `schedule` always spans exactly `[0, duration)`, so this lookup
         // succeeds for any `matchT` reachable here — the branch above already
@@ -5829,46 +5890,47 @@ class Arena {
         // cannot turn a missed lookup into a `slot.from` crash.
         const slot = schedule.find((s) => matchT >= s.from && matchT < s.to) || {
           phase: "RED",
-          from: schedule.length ? schedule[schedule.length - 1].to : 0,
+          from: schedule.length ? schedule[schedule.length - 1].from : 0,
           to: duration,
         };
-        const phase = slot.phase;
-        if (this.stage.dataset.phase !== phase) this.setPhase(phase);
-        if (phase === "RED") {
-          this.setPhaseSub(matchT - slot.from >= grace ? "Armed" : "Grace");
-          if (this.doll) this.doll.setArmed(matchT - slot.from >= grace);
+        enter(slot.phase);
+        if (slot.phase === "RED") {
+          const armed = matchT - slot.from >= grace;
+          this.setPhaseSub(armed ? "Armed" : "Grace");
+          if (this.doll) this.doll.setArmed(armed);
         } else {
           this.setPhaseSub("Chant running");
           if (this.doll) this.doll.setArmed(false);
         }
-        field.dataset.phase = phase;
+        field.dataset.phase = slot.phase;
+        const left = Math.max(Math.ceil(duration - matchT), 0);
+        showRing(
+          slot.phase,
+          String(left),
+          left === 1 ? "second left" : "seconds left",
+          1 - matchT / duration
+        );
       }
 
-      for (const [trackId, at, reason] of demo.eliminations) {
-        const token = tokens.find((t) => t.id === trackId);
-        if (!token || token.out || matchT < at) continue;
-        token.out = true;
-        token.node.dataset.out = "true";
-        // The recorded reason, shown against the player it belongs to: a
-        // lost track and a caught movement are different failures and the
-        // replay should not blur them into one.
-        token.node.querySelector(".tk-why").textContent =
-          reason === "moved" ? "moved" : "lost";
-        this.setStatus("Player " + trackId + " out at " + fmt(at, 1) + "s: " + reason + ".");
-      }
-
-      const ring = el("ring");
-      if (ring) {
-        ring.dataset.phase = this.stage.dataset.phase;
-        el("ringValue").textContent = String(
-          Math.max(Math.ceil(matchT < 0 ? -matchT : duration - matchT), 0)
-        );
-        el("ringUnit").textContent = matchT < 0 ? "starting" : "seconds left";
-        ring.querySelector(".sweep").style.strokeDashoffset = fmt(
-          RING_CIRCUMFERENCE *
-            (1 - Math.max(Math.min(matchT < 0 ? -matchT / countdown : 1 - matchT / duration, 1), 0)),
-          2
-        );
+      // Recomputed from the time, not latched: a scrub backwards puts a
+      // player back in, and only a player going out is announced.
+      for (const token of tokens) {
+        const call = demo.eliminations.find(([trackId]) => trackId === token.id);
+        const out = call !== undefined && matchT >= call[1];
+        if (out === token.out) continue;
+        token.out = out;
+        token.node.dataset.out = out ? "true" : "false";
+        token.node.querySelector(".tk-why").textContent = out
+          ? call[2] === "moved"
+            ? "moved"
+            : "lost"
+          : "";
+        if (out) {
+          // The recorded reason, shown against the player it belongs to: a
+          // lost track and a caught movement are different failures and the
+          // replay should not blur them into one.
+          this.setStatus("Player " + call[0] + " out at " + fmt(call[1], 1) + "s: " + call[2] + ".");
+        }
       }
 
       this.replayTimer = requestAnimationFrame(step);
