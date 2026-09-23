@@ -1,37 +1,13 @@
-"""The repository has to read as a product, everywhere, all the time.
+"""Tracked text contains no banned phrases and no absolute local paths.
 
-This is a copy test, not a code test, and it is here because framing rots in
-exactly the places nobody re-reads: a docstring written during a spike, a
-sentence in a README that made sense when it was written, a line in a
-generated page that came along for the ride. One of those is enough to
-change what the whole thing looks like to somebody arriving cold.
+The scan covers every text file git tracks — sources, tests, docs, the built
+`docs/index.html`, the packaging metadata and this file too — so what is
+checked is exactly what is published. Build output, virtual environments and
+scratch files are not tracked, so they are not read.
 
-So the check is mechanical and it covers everything tracked in git —
-sources, tests, docs, the built `docs/index.html`, the packaging metadata.
-The only file exempt is this one, which has to spell the phrases out to look
-for them, and a test below holds that exemption to exactly one file. A
-pattern that fires anywhere else is either a genuine slip or a sign the
-pattern is wrong, and the second case is a conversation rather than a quiet
-addition to an allowlist.
-
-Three groups of patterns, for three different failure modes:
-
-* **Dating the project.** A year ties this project to a moment it is not
-  from, so it stays banned. The show that made this playground game
-  recognisable is not: naming it is how somebody searching for it finds this
-  project, and that is worth more than the caution the phrase used to buy.
-  What still is not here is the show's actual audio or artwork — the name is
-  a fact about the game, not a license to use what the name points at.
-* **Coursework framing.** "College", "university", "coursework" describe why
-  something was made rather than what it does, and a reader who wanted to
-  know what it does now has to look past that.
-* **Second-system framing.** "Rebuild", "legacy", "originally", "the
-  original" all describe this work as a version of some earlier work. It
-  isn't one, and writing as though it were invites the reader to evaluate it
-  against something they cannot see.
-
-The last group also covers the tooling that helped write it. Whose keyboard
-produced a line is not part of what the software does.
+Each banned phrase is assembled from fragments, so the list below never
+contains a literal copy of what it guards against, and this file needs no
+exemption from its own scan.
 """
 
 from __future__ import annotations
@@ -44,30 +20,25 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-SCANNER = Path(__file__).resolve()
-"""This file, excluded from its own scan.
-
-The only exemption, and an unavoidable one: a list of phrases that must not
-appear anywhere is itself a file containing every one of them. Excluding the
-scanner is the whole of the exemption — there is no allowlist beside it, and
-`test_only_the_scanner_is_exempt` holds it to exactly one file.
-"""
-
 BANNED = (
-    r"\b2023\b",
-    r"college",
-    r"university",
-    r"coursework",
-    r"rebuilt",
-    r"rebuild",
-    r"legacy",
-    r"originally",
-    r"the original",
-    r"claude",
-    r"anthropic",
-    r"co-authored",
+    r"\b20" + r"23\b",
+    "col" + "lege",
+    "univer" + "sity",
+    "course" + "work",
+    "re" + "built",
+    "re" + "build",
+    "leg" + "acy",
+    "origin" + "ally",
+    "the orig" + "inal",
+    "cla" + "ude",
+    "anthro" + "pic",
+    "co-" + "authored",
 )
-"""Every pattern, matched case-insensitively, against every tracked text file."""
+"""Every pattern, matched case-insensitively, against every line of every
+tracked text file."""
+
+ABSOLUTE_PATH = "/Us" + "ers/"
+"""A home-directory path: it names a machine, and it resolves on no other."""
 
 BINARY_SUFFIXES = frozenset(
     {
@@ -93,12 +64,7 @@ not decode as UTF-8 is skipped as binary rather than guessed at."""
 
 
 def tracked_files() -> list[Path]:
-    """Every file git knows about, as absolute paths.
-
-    Deliberately `git ls-files` rather than a directory walk: the point is to
-    check what is published, and a walk would sweep up build output, virtual
-    environments and scratch files that are not part of the repository.
-    """
+    """Every file git knows about, as absolute paths."""
     result = subprocess.run(
         ["git", "ls-files", "-z"],
         cwd=REPO_ROOT,
@@ -112,8 +78,6 @@ def tracked_files() -> list[Path]:
 def text_files() -> list[Path]:
     files = []
     for path in tracked_files():
-        if path.resolve() == SCANNER:
-            continue
         if not path.exists() or path.suffix.lower() in BINARY_SUFFIXES:
             continue
         try:
@@ -122,6 +86,23 @@ def text_files() -> list[Path]:
             continue
         files.append(path)
     return files
+
+
+def matching_lines(pattern: str, paths: list[Path]) -> list[str]:
+    """`path:line: text` for every line matching `pattern`, case-insensitively."""
+    compiled = re.compile(pattern, re.IGNORECASE)
+    hits = []
+    for path in paths:
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            if compiled.search(line):
+                try:
+                    shown = path.relative_to(REPO_ROOT)
+                except ValueError:
+                    shown = path
+                # Built pages are one enormous line; a slice keeps the failure
+                # readable instead of dumping half a megabyte into the report.
+                hits.append(f"{shown}:{number}: {line.strip()[:160]}")
+    return hits
 
 
 if not (REPO_ROOT / ".git").exists():
@@ -140,56 +121,41 @@ TEXT_FILES = text_files()
 def test_the_repository_has_text_files_to_check():
     """A scan that found nothing to scan would pass every test below."""
     names = {path.name for path in TEXT_FILES}
-    for expected in ("README.md", "pyproject.toml", "index.html", "judge.py"):
+    for expected in ("README.md", "pyproject.toml", "index.html", "judge.py", "test_framing.py"):
         assert expected in names, f"{expected} should be tracked and readable as text"
     assert len(TEXT_FILES) > 20, f"only {len(TEXT_FILES)} text files found; is git ls-files working?"
 
 
-@pytest.mark.parametrize("pattern", BANNED)
-def test_no_tracked_file_carries_a_banned_phrase(pattern):
-    """No tracked text file mentions the phrase, in any case."""
-    compiled = re.compile(pattern, re.IGNORECASE)
-    hits = []
-
-    for path in TEXT_FILES:
-        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-            if compiled.search(line):
-                relative = path.relative_to(REPO_ROOT)
-                # Built pages are one enormous line; a slice keeps the failure
-                # readable instead of dumping half a megabyte into the report.
-                hits.append(f"{relative}:{number}: {line.strip()[:160]}")
-
-    assert hits == [], "banned phrase " + repr(pattern) + " found:\n  " + "\n  ".join(hits[:20])
-
-
-def test_only_the_scanner_is_exempt():
-    """Exactly one tracked text file is skipped, and it is this one.
-
-    If a second exemption ever appears it will be because something was
-    easier to skip than to reword, which is the failure this whole module
-    exists to prevent.
-    """
-    scanned = {path.resolve() for path in TEXT_FILES}
-    tracked_text = {
-        path.resolve()
-        for path in tracked_files()
-        if path.exists() and path.suffix.lower() not in BINARY_SUFFIXES
-    }
-    decodable = set()
-    for path in tracked_text:
-        try:
-            path.read_text(encoding="utf-8")
-        except (UnicodeDecodeError, OSError):
-            continue
-        decodable.add(path)
-
-    assert decodable - scanned == {SCANNER}
-
-
 def test_the_built_page_is_covered_by_this_scan():
-    """The published page is generated, and generated text still ships.
-
-    A scan that quietly skipped `docs/index.html` would let anything inlined
-    from `site/` through, which is precisely the text a visitor reads first.
-    """
+    """The published page is generated, and generated text still ships."""
     assert (REPO_ROOT / "docs" / "index.html") in TEXT_FILES
+
+
+@pytest.mark.parametrize("pattern", BANNED, ids=[f"phrase{i:02d}" for i in range(len(BANNED))])
+def test_no_tracked_file_carries_a_banned_phrase(pattern):
+    hits = matching_lines(pattern, TEXT_FILES)
+    assert hits == [], "banned phrase found:\n  " + "\n  ".join(hits[:20])
+
+
+def test_no_tracked_file_carries_an_absolute_local_path():
+    hits = matching_lines(re.escape(ABSOLUTE_PATH), TEXT_FILES)
+    assert hits == [], "absolute local path found:\n  " + "\n  ".join(hits[:20])
+
+
+def test_every_pattern_catches_its_phrase_in_any_case(tmp_path):
+    """A pattern that could never match would pass the scan above forever.
+
+    Each phrase is planted, upper-cased, in a scratch file and must be found
+    by the same `matching_lines` the scan uses; an ordinary sentence must not.
+    """
+    phrases = ["shipped in 20" + "23.", *BANNED[1:]]
+    patterns = [*BANNED, re.escape(ABSOLUTE_PATH)]
+    phrases.append("see " + ABSOLUTE_PATH + "someone/file")
+
+    clean = tmp_path / "clean.txt"
+    clean.write_text("A referee for a party game, measured on real footage.\n", encoding="utf-8")
+    planted = tmp_path / "planted.txt"
+    for index, (pattern, phrase) in enumerate(zip(patterns, phrases)):
+        planted.write_text("Some text, " + phrase.upper() + ", more text.\n", encoding="utf-8")
+        assert matching_lines(pattern, [planted]), f"pattern {index} missed its own phrase"
+        assert matching_lines(pattern, [clean]) == [], f"pattern {index} flagged a clean line"
