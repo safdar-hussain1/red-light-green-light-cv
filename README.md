@@ -110,7 +110,8 @@ pytest tests/test_js_parity.py    # the browser/Python parity suite under Node: 
 CI runs the whole suite with nothing skipped: it needs no camera, no GPU
 and no private data, because the weights and the footage are committed. The
 one skip is local: in a copy with no git history (a ZIP download),
-`tests/test_framing.py` skips, because it scans `git ls-files`.
+`tests/test_framing.py` skips, because it scans `git ls-files`, and `pytest`
+reports `268 passed, 1 skipped`.
 
 ### Play a match
 
