@@ -42,7 +42,7 @@ crossed boxes labelled OUT are players who already moved.*
 - **Browser/Python parity, bit for bit.** The scoring kernel in the tab and
   the one in Python produce identical numbers on shared golden 96 × 96
   window fixtures. Exact equality, not a tolerance.
-- **283 tests** (281 without the two slow ones), and six load-bearing
+- **287 tests** (285 without the two slow ones), and six load-bearing
   claims checked by mutating the mechanism behind each one: **6 of 6
   mutations were caught** by tests that already existed.
 
@@ -53,7 +53,7 @@ crossed boxes labelled OUT are players who already moved.*
 The commands below were run on macOS (Apple silicon) with Python 3.13 while
 this README was written, all except the webcam line, and the outputs shown
 are real (trimmed where marked). CI runs the same test suite on Linux with
-Python 3.12 and 3.13.
+Python 3.12 and 3.13, then builds the page again and fails if `docs/` changes.
 
 ### Set up
 
@@ -90,9 +90,10 @@ else Ultralytics first downloads its own copy of `yolo11n.pt` into
 
 > **If `redlight` fails with `ModuleNotFoundError: No module named 'redlight'`
 > after the install worked,** Python skipped the editable install's `.pth`
-> file. Python 3.13 ignores `.pth` files that carry macOS's hidden flag, and
-> inside a folder that iCloud Drive syncs (Desktop or Documents) that flag can
-> appear on the virtual environment's files a few minutes after the install.
+> file. Current Python releases (3.12 and 3.13 both behave this way) skip
+> `.pth` files that carry macOS's hidden flag, and inside a folder that
+> iCloud Drive syncs (Desktop or Documents) that flag can appear on the
+> virtual environment's files a few minutes after the install.
 > Clone somewhere iCloud does not sync, or clear the flag with
 > `chflags nohidden .venv/lib/python3.*/site-packages/*.pth`, or run from the
 > repository root with `export PYTHONPATH=src`. A non-editable
@@ -102,8 +103,8 @@ else Ultralytics first downloads its own copy of `yolo11n.pt` into
 ### Test
 
 ```bash
-pytest                            # 283 passed, one to two minutes
-pytest -m "not slow"              # 281 passed, 2 deselected: skips the two YOLO passes over the footage
+pytest                            # 287 passed, one to two minutes
+pytest -m "not slow"              # 285 passed, 2 deselected: skips the two YOLO passes over the footage
 pytest tests/test_js_parity.py    # the browser/Python parity suite under Node: 17 passed
 ```
 
@@ -111,7 +112,7 @@ CI runs the whole suite with nothing skipped: it needs no camera, no GPU
 and no private data, because the weights and the footage are committed. The
 one skip is local: in a copy with no git history (a ZIP download),
 `tests/test_framing.py` skips, because it scans `git ls-files`, and `pytest`
-reports `268 passed, 1 skipped`.
+reports `271 passed, 1 skipped`.
 
 ### Play a match
 
@@ -235,7 +236,8 @@ background-scenario results and the demo match did not move at all.
 ### Build and view the page
 
 ```bash
-redlight build-site               # wrote docs/index.html
+redlight build-site                               # wrote docs/index.html
+redlight build-site --out /tmp/rl-page/index.html # the same page, somewhere else
 ```
 
 The build inlines `site/*.css` and `site/*.js` into `site/template.html` and
@@ -277,8 +279,11 @@ python scripts/verify_site.py
 # PASS  a walking player is called out             (same probe)
 # PASS  a still player survives both red lights    (same probe)
 # PASS  the cutoff is calibrated on the countdown  Calibrated to your camera: cutoff 0.2910. ...
-# PASS  replay runs without a camera               PROBE LOBBY>replay>COUNTDOWN>GREEN>RED>GREEN>RED>GREEN>RED
+# PASS  replay runs without a camera               PROBE LOBBY>replay>COUNTDOWN>GREEN>RED>GREEN>RED>GREEN
 # PASS  screenshots written                        16 files
+
+python scripts/verify_site.py --no-shots     # the eight checks only, about 35 s
+python scripts/verify_site.py --shots-only   # the screenshots, then the play path again to capture it
 ```
 
 ### Figures, chant and notebook
@@ -286,6 +291,7 @@ python scripts/verify_site.py
 ```bash
 python scripts/make_figures.py    # about 90 s; rewrites everything in reports/figures/
 redlight make-audio               # wrote assets/doll_song.wav (5.38s)
+redlight make-audio --out /tmp/rl-page/chant.wav   # the same bytes, somewhere else
 jupyter nbconvert --to notebook --execute notebooks/judge_design.ipynb --output-dir /tmp/nb
 ```
 
@@ -539,14 +545,13 @@ Every one of these is measured or reproducible, not hypothetical.
   press play and grant a camera, and nothing else on the page depends on it
   — every published number, the referee lab, the replay and the selftest run
   with it never loading.
-- **The recorded replay's sidebar is not synced to the video.** Under
-  *Watch a recorded match*, the video is the real recorded run, with its own
-  HUD. The light, doll and countdown beside it run a reconstructed light
-  schedule on the page's clock instead: they start about two seconds ahead
-  of the video, which opens on the lobby, and the reconstructed phase
-  boundaries differ from the recorded ones by up to about half a second. So
-  the sidebar can say red while the video says green. The video's HUD is the
-  record.
+- **The recorded replay is only as fine as its frames.** Under *Watch a
+  recorded match*, the light, doll, countdown and roster beside the video
+  are worked out from the video's own playback position and the match's
+  recorded light schedule, so they follow a slow start, a pause or a scrub.
+  The recording is 10 fps and the lights changed between frames, so within
+  a tenth of a second of a change the sidebar can show the new light one
+  frame before the picture does.
 - **The benchmark is one scene.** `data/vtest.avi` is a single outdoor
   courtyard at 10 fps. Every number above describes the judge on that
   footage. Nothing here has been measured across lighting conditions,
@@ -585,7 +590,7 @@ docs/DESIGN.md       the design card: pipeline contracts, judge math,
 notebooks/           judge_design.ipynb — how the judge was arrived at
 reports/             benchmark_results.json and the committed figures
 scripts/             figure rendering, weight fetching, site verification
-tests/               283 tests, including browser/Python parity, framing and
+tests/               287 tests, including browser/Python parity, framing and
                      the page's metadata
 data/, models/       ground-truth footage and the YOLO11n weights
 assets/              the synthesised chant, doll_song.wav
