@@ -4,40 +4,87 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Red Light, Green Light — play the Squid Game challenge against a computer-vision referee</title>
+    <title>Red Light, Green Light — computer-vision Squid Game referee</title>
     <meta
       name="description"
-      content="Play the Squid Game challenge — Red Light, Green Light — in your browser against a computer-vision referee. The same judge the Python engine runs, proven by shared fixtures."
+      content="Play the Squid Game challenge on your webcam. A computer-vision referee runs in your browser and calls out anyone who moves on red. Nothing is uploaded."
     />
-    <meta property="og:title" content="Red Light, Green Light — play the Squid Game challenge against a computer-vision referee" />
-    <meta
-      property="og:description"
-      content="Play the Squid Game challenge — Red Light, Green Light — in your browser against a computer-vision referee. Nothing is uploaded, nothing is recorded."
-    />
-    <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://safdar-hussain1.github.io/red-light-green-light-cv/" />
     <meta name="author" content="Safdar Hussain" />
     <meta name="google-site-verification" content="0SIEfExLTSQj1qvnHWF5A5fY58KVl2lpIEnePP9CtI0" />
     <link rel="canonical" href="https://safdar-hussain1.github.io/red-light-green-light-cv/" />
-    <meta property="og:site_name" content="Red Light, Green Light" />
-    <meta name="twitter:card" content="summary" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Safdar Hussain" />
+    <meta property="og:title" content="Red Light, Green Light — computer-vision Squid Game referee" />
+    <meta
+      property="og:description"
+      content="Play the Squid Game challenge on your webcam. A computer-vision referee runs in your browser and calls out anyone who moves on red. Nothing is uploaded."
+    />
+    <meta property="og:url" content="https://safdar-hussain1.github.io/red-light-green-light-cv/" />
+    <meta property="og:image" content="https://safdar-hussain1.github.io/red-light-green-light-cv/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="The Red Light, Green Light page: the headline with RED LIGHT lit and GREEN LIGHT dimmed, the Play and Watch a recorded match buttons, and the referee doll facing forward for a red light."
+    />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Red Light, Green Light — computer-vision Squid Game referee" />
+    <meta
+      name="twitter:description"
+      content="Play the Squid Game challenge on your webcam. A computer-vision referee runs in your browser and calls out anyone who moves on red. Nothing is uploaded."
+    />
+    <meta name="twitter:image" content="https://safdar-hussain1.github.io/red-light-green-light-cv/og-image.png" />
+    <meta
+      name="twitter:image:alt"
+      content="The Red Light, Green Light page: the headline with RED LIGHT lit and GREEN LIGHT dimmed, the Play and Watch a recorded match buttons, and the referee doll facing forward for a red light."
+    />
+
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
-        "@type": "VideoGame",
-        "name": "Red Light, Green Light — a Computer-Vision Referee",
-        "description": "Play Red Light, Green Light — the Squid Game challenge — in your browser against a computer-vision referee. Your webcam, everything on-device, nothing uploaded.",
-        "url": "https://safdar-hussain1.github.io/red-light-green-light-cv/",
-        "gamePlatform": "Web browser",
-        "applicationCategory": "GameApplication",
-        "operatingSystem": "Web browser",
-        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
-        "author": {
-          "@type": "Person",
-          "name": "Safdar Hussain",
-          "url": "https://github.com/safdar-hussain1",
-          "sameAs": ["https://www.linkedin.com/in/safdar-hussain-a8a61b248"]
-        }
+        "@graph": [
+          {
+            "@type": "VideoGame",
+            "name": "Red Light, Green Light",
+            "url": "https://safdar-hussain1.github.io/red-light-green-light-cv/",
+            "description": "Play the Squid Game challenge on your webcam. A computer-vision referee runs in your browser and calls out anyone who moves on red. Nothing is uploaded.",
+            "image": "https://safdar-hussain1.github.io/red-light-green-light-cv/og-image.png",
+            "gamePlatform": "Web browser",
+            "applicationCategory": "GameApplication",
+            "operatingSystem": "Any (runs in a web browser)",
+            "browserRequirements": "Requires JavaScript. Live play needs a camera, WebAssembly and WebGL; the recorded match, the referee lab and the results do not.",
+            "isAccessibleForFree": true,
+            "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+            "author": {
+              "@type": "Person",
+              "name": "Safdar Hussain",
+              "url": "https://github.com/safdar-hussain1",
+              "sameAs": [
+                "https://github.com/safdar-hussain1",
+                "https://www.linkedin.com/in/safdar-hussain-a8a61b248"
+              ]
+            }
+          },
+          {
+            "@type": "SoftwareSourceCode",
+            "name": "Red Light, Green Light",
+            "codeRepository": "https://github.com/safdar-hussain1/red-light-green-light-cv",
+            "programmingLanguage": ["Python", "JavaScript"],
+            "license": "https://opensource.org/licenses/MIT",
+            "author": {
+              "@type": "Person",
+              "name": "Safdar Hussain",
+              "url": "https://github.com/safdar-hussain1",
+              "sameAs": [
+                "https://github.com/safdar-hussain1",
+                "https://www.linkedin.com/in/safdar-hussain-a8a61b248"
+              ]
+            }
+          }
+        ]
       }
     </script>
     <meta name="color-scheme" content="light dark" />

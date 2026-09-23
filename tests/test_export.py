@@ -90,10 +90,22 @@ def test_no_local_asset_references_survive_the_build(html):
 
     A `data:` URI is still self-contained, so it is allowed; a relative path
     is not, because there is nothing next to the file to resolve it against.
+
+    The favicon is the one exception, and only because it is committed next
+    to the page: `docs/favicon.svg` ships beside `docs/index.html` the same
+    way the recorded match video does, so a relative `rel="icon"` link
+    resolves on the static host. Any other relative link still fails here.
     """
-    assert not re.search(r'<link\b[^>]*href\s*=\s*["\'](?!https?://|data:|#)', html), (
-        "a relative stylesheet link would 404 on a static host"
-    )
+    for tag in re.findall(r"<link\b[^>]*>", html):
+        href = re.search(r'href\s*=\s*["\']([^"\']+)["\']', tag)
+        if href is None or re.match(r"https?://|data:|#", href.group(1)):
+            continue
+        assert re.search(r'rel\s*=\s*["\']icon["\']', tag), (
+            f"a relative link would 404 on a static host: {tag}"
+        )
+        assert (REPO_ROOT / "docs" / href.group(1)).is_file(), (
+            f"the favicon link points at docs/{href.group(1)}, which is not committed"
+        )
     assert not re.search(r'<script\b[^>]*src\s*=\s*["\'](?!https?://|data:)', html), (
         "a relative script src would 404 on a static host"
     )
