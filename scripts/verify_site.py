@@ -303,12 +303,20 @@ def run_chrome(args: list[str], timeout: float = 120.0) -> subprocess.CompletedP
     desktop Chrome is already running makes the launch block indefinitely —
     which shows up here as every check timing out for no visible reason.
     """
-    return subprocess.run(
-        [chrome_binary(), *BASE_FLAGS, *args],
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-    )
+    try:
+        return subprocess.run(
+            [chrome_binary(), *BASE_FLAGS, *args],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        # A browser that never exits is a failed check, not a crash: hand
+        # back whatever it printed and let the caller's assertion say FAIL.
+        output = exc.stdout or ""
+        if isinstance(output, bytes):
+            output = output.decode("utf-8", "replace")
+        return subprocess.CompletedProcess(exc.cmd, -1, output, "")
 
 
 def dump_page(url: str, extra: tuple[str, ...] = ()) -> tuple[str, str]:
