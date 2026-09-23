@@ -259,18 +259,19 @@ not a nearby setting's.
 
 Six claims carry the product. Each was verified by breaking the mechanism
 behind it and confirming that tests which already existed caught the break —
-the mutation was applied, the suite run, then reverted and the tree
-confirmed clean. Baseline and final state both: `234 passed, 2 deselected`.
+the mutation was applied, the fast suite (`pytest -m "not slow"`) run, then
+the file restored from a saved copy, checked by hash, and the tree confirmed
+clean. Baseline and final state both: `281 passed, 2 deselected`.
 
 | # | Claim | Mutation applied | Targeted failing tests | Suite result |
 |---|---|---|---|---|
-| 1 | Resolution / distance invariance | `crop_window` skips resampling to the fixed `WINDOW` and resizes the crop to its own size | `test_score_is_resolution_invariant`, `test_crop_window_shape_and_dtype`, `test_frozen_scores_zero`, `test_sensor_noise_stays_under_deadband`, `test_diff_score_is_not_dt_invariant`, `test_diff_verdicts_framerate_invariant_via_sampler`, `test_raw_flow_max_grows_with_scale_while_flow_score_holds` | 9 failed, 190 passed, 35 errors |
-| 2a | Frame-rate invariance (flow) | `flow_score` drops the `/ dt` division | `test_score_is_resolution_invariant`, `test_score_is_framerate_invariant` | 2 failed, 232 passed |
-| 2b | Frame-rate invariance (clock) | `FrameSampler.offer` releases on every offer, ignoring `interval_s` | `test_diff_verdicts_framerate_invariant_via_sampler`, `test_frame_sampler_holds_the_interval`, `test_frame_sampler_still_holds_back_a_genuinely_early_frame`, `test_js_frame_sampler_matches_python` | 4 failed, 230 passed |
-| 3 | Noise deadband | `FLOW_NOISE_FLOOR_PX = 0.0` and `DIFF_PIXEL_DELTA = 0` | `test_frozen_scores_zero`, `test_sensor_noise_stays_under_deadband`, `test_chosen_thresholds_clear_every_held_frame`, `test_a_frozen_player_is_never_flagged_when_nothing_crosses_them`, `test_fixtures_reproduce_python_exactly`, and 6 more | 11 failed, 223 passed |
-| 4 | No phantom spike at a phase change | `judge.reset()` and `sampler.reset()` removed from the `PHASE_CHANGED` handler | `test_reset_call_count_matches_phase_changed_event_count` | 1 failed, 233 passed |
-| 5 | Per-box protection (the spectator claim) | `flow_score` and `diff_score` ignore `box` and score the whole frame | `test_degenerate_box_returns_none`, `test_chosen_thresholds_clear_every_held_frame`, `test_a_frozen_player_is_never_flagged_when_nothing_crosses_them`, `test_the_isolated_variant_had_walkers_it_painted_over`, and 3 more | 7 failed, 227 passed |
-| 6 | Browser parity | `DIFF_PIXEL_DELTA` changed 25 → 24 in `site/judge.js` | `test_js_diff_score_matches_python_on_every_fixture`, `test_committed_page_is_up_to_date` | 2 failed, 232 passed |
+| 1 | Resolution / distance invariance | `crop_window` skips resampling to the fixed `WINDOW` and resizes the crop to its own size | `test_score_is_resolution_invariant`, `test_crop_window_shape_and_dtype`, `test_frozen_scores_zero`, `test_sensor_noise_stays_under_deadband`, `test_diff_score_is_not_dt_invariant`, `test_diff_verdicts_framerate_invariant_via_sampler`, `test_raw_flow_max_grows_with_scale_while_flow_score_holds` | 9 failed, 237 passed, 35 errors |
+| 2a | Frame-rate invariance (flow) | `flow_score` drops the `/ dt` division | `test_score_is_resolution_invariant`, `test_score_is_framerate_invariant` | 2 failed, 279 passed |
+| 2b | Frame-rate invariance (clock) | `FrameSampler.offer` releases on every offer, ignoring `interval_s` | `test_diff_verdicts_framerate_invariant_via_sampler`, `test_frame_sampler_holds_the_interval`, `test_frame_sampler_still_holds_back_a_genuinely_early_frame`, `test_js_frame_sampler_matches_python` | 4 failed, 277 passed |
+| 3 | Noise deadband | `FLOW_NOISE_FLOOR_PX = 0.0` and `DIFF_PIXEL_DELTA = 0` | `test_frozen_scores_zero`, `test_sensor_noise_stays_under_deadband`, `test_chosen_thresholds_clear_every_held_frame`, `test_a_frozen_player_is_never_flagged_when_nothing_crosses_them`, `test_fixtures_reproduce_python_exactly`, and 6 more | 11 failed, 270 passed |
+| 4 | No phantom spike at a phase change | `judge.reset()` and `sampler.reset()` removed from the `PHASE_CHANGED` handler | `test_reset_call_count_matches_phase_changed_event_count` | 1 failed, 280 passed |
+| 5 | Per-box protection (the spectator claim) | `flow_score` and `diff_score` ignore `box` and score the whole frame | `test_degenerate_box_returns_none`, `test_chosen_thresholds_clear_every_held_frame`, `test_a_frozen_player_is_never_flagged_when_nothing_crosses_them`, `test_the_isolated_variant_had_walkers_it_painted_over`, and 3 more | 7 failed, 274 passed |
+| 6 | Browser parity | `DIFF_PIXEL_DELTA` changed 25 → 24 in `site/judge.js` | `test_js_diff_score_matches_python_on_every_fixture`, `test_committed_page_is_up_to_date` | 2 failed, 279 passed |
 
 **Survivors: 0 of 6.** Every mutation was caught on its first attempt by at
 least one existing test; no missing test had to be written, and nothing was
