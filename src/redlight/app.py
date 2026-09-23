@@ -44,11 +44,10 @@ class MatchReport:
     happened, as `(track_id, match-relative seconds, reason)`; `reason`
     matches `game.Event.reason`: `"moved"` or `"left_arena"`.
 
-    Fields are keyword-only: this class and the brief that specifies it
-    order them differently (`outcome, players, survivors, eliminations`
-    here vs. `outcome, eliminations, survivors, players` there), so
-    positional construction would silently transpose `players`/`survivors`
-    for anyone going by the brief. Keyword-only makes that impossible.
+    Fields are keyword-only. `players` and `survivors` are both counts, so
+    a positional call that had the field order wrong would swap them
+    silently instead of failing; keyword-only construction makes that
+    impossible.
     """
 
     outcome: str

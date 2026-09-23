@@ -56,7 +56,11 @@ class TestHelp:
 
 
 class TestParserHasNoFlagCollisions:
-    """Playbook 7g: no top-level flag may shadow a subcommand's own flag."""
+    """No top-level flag may shadow a subcommand's own flag.
+
+    argparse would let a top-level `--x` quietly take the value meant for a
+    subcommand's own `--x`, so the two parsers must not share a flag name.
+    """
 
     def test_top_level_parser_defines_no_custom_flags(self):
         parser = cli.build_parser()

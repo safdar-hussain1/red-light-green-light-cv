@@ -1,7 +1,7 @@
 """Tests for the chant synthesiser and optional audio playback.
 
-The chant itself lives in `chant.json` as data, not code, so the browser
-build (Task 11) can bake the exact same melody into the site — one source
+The chant itself lives in `chant.json` as data, not code, so the site
+build can bake the exact same melody into the browser page — one source
 of truth for both renderers. These tests pin the properties that source of
 truth has to hold: it decodes to a valid, audible WAV; rendering it twice
 produces the same bytes; and playback degrades to a silent no-op whenever

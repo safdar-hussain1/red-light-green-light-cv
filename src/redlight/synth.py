@@ -1,7 +1,7 @@
 """Renders the chant and the elimination buzzer as WAV audio.
 
 `chant.json` holds the melody as data — `{"bpm": ..., "notes": [[midi,
-beats], ...]}` — so it can be baked into the browser build (Task 11) as the
+beats], ...]}` — so the site build can bake it into the browser page as the
 same source of truth, without either renderer depending on the other.
 Everything here is pure arithmetic on that data: three sine oscillators per
 note, shaped by an attack / decay / sustain / release envelope so notes
