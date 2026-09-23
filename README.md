@@ -102,7 +102,7 @@ else Ultralytics first downloads its own copy of `yolo11n.pt` into
 ### Test
 
 ```bash
-pytest                            # 283 passed, about a minute and a half
+pytest                            # 283 passed, one to two minutes
 pytest -m "not slow"              # 281 passed, 2 deselected: skips the two YOLO passes over the footage
 pytest tests/test_js_parity.py    # the browser/Python parity suite under Node: 17 passed
 ```
