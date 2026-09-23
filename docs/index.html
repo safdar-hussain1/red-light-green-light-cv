@@ -3240,8 +3240,9 @@ redlight play --source 0
 # referee the included footage, headless, and report
 redlight play --source data/vtest.avi --headless --auto-start 10
 
-# reproduce every number on this page
-redlight benchmark --out reports/benchmark_results.json
+# reproduce every number on this page, into a scratch file
+# (exact on the package versions the README pins)
+redlight benchmark --out /tmp/bench.json
 
 # build this page from the results
 redlight build-site</code></pre>
