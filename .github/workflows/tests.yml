@@ -1,0 +1,58 @@
+# The full test suite on every push to main and every pull request against
+# it, on the two Python versions the project is tested on.
+#
+# Nothing is skipped. The suite needs no camera, no GPU and no private data:
+# the YOLO11n weights and the benchmark footage are committed, so the two
+# slow tests (a YOLO pass over real footage) run here too, on the CPU. Node
+# runs the browser/Python parity suite; without it those tests skip, so it is
+# installed explicitly instead of left to whatever the runner image carries.
+#
+# torch comes from PyTorch's CPU-only index first. The default Linux wheel on
+# PyPI pulls in several gigabytes of CUDA libraries a CPU runner never uses;
+# with CPU torch already installed, the package install leaves it alone.
+
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # opencv-python needs libGL at import time. The hosted image normally
+      # has it; install it only if it is missing.
+      - name: Make sure OpenCV can load libGL
+        run: ldconfig -p | grep -q 'libGL.so.1' || (sudo apt-get update && sudo apt-get install -y libgl1)
+
+      - name: Install CPU-only torch
+        run: pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Install the package
+        run: pip install -e ".[audio,analysis,dev]"
+
+      - name: Run the suite
+        run: pytest -rs
