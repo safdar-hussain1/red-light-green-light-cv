@@ -335,6 +335,10 @@ def screenshot(url: str, out: Path, size: tuple[int, int], settle_ms: int | None
     instead.
     """
     out.parent.mkdir(parents=True, exist_ok=True)
+    # Remove the last run's capture first. The check that a screenshot was
+    # written looks for the file, so a stale one would pass it even when
+    # Chrome wrote nothing this time.
+    out.unlink(missing_ok=True)
     flags = [f"--screenshot={out}", f"--window-size={size[0]},{size[1]}"]
     if settle_ms is not None:
         flags.append(f"--virtual-time-budget={settle_ms}")
