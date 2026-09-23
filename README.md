@@ -7,6 +7,10 @@ browser tab on your own machine, and the same rules run as a Python engine
 over a webcam or any video file — the playground game made world-famous by
 Squid Game.
 
+[![tests](https://github.com/safdar-hussain1/red-light-green-light-cv/actions/workflows/tests.yml/badge.svg)](https://github.com/safdar-hussain1/red-light-green-light-cv/actions/workflows/tests.yml)
+[![Python 3.12 | 3.13](https://img.shields.io/badge/python-3.12%20%7C%203.13-3776ab)](.github/workflows/tests.yml)
+[![MIT licence](https://img.shields.io/badge/licence-MIT-2ea44f)](LICENSE)
+
 **[Play it in your browser](https://safdar-hussain1.github.io/red-light-green-light-cv/)** —
 no install, no upload, nothing recorded.
 
@@ -38,13 +42,20 @@ crossed boxes labelled OUT are players who already moved.*
 - **Browser/Python parity, bit for bit.** The scoring kernel in the tab and
   the one in Python produce identical numbers on shared golden 96 × 96
   window fixtures. Exact equality, not a tolerance.
-- **235 tests** (233 without the two slow ones), and six load-bearing claims
-  checked by mutating the mechanism behind each one: **6 of 6 mutations were
-  caught** by tests that already existed.
+- **283 tests** (281 without the two slow ones), and six load-bearing
+  claims checked by mutating the mechanism behind each one: **6 of 6
+  mutations were caught** by tests that already existed.
 
 ---
 
-## Quickstart
+## Every command
+
+The commands below were run on macOS (Apple silicon) with Python 3.13 while
+this README was written, all except the webcam line, and the outputs shown
+are real (trimmed where marked). CI runs the same test suite on Linux with
+Python 3.12 and 3.13.
+
+### Set up
 
 ```bash
 git clone https://github.com/safdar-hussain1/red-light-green-light-cv.git
@@ -54,43 +65,235 @@ python3 -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -e ".[audio,analysis,dev]"
 
-pytest
+redlight --help                    # lists play, benchmark, make-audio, build-site
 ```
+
+`python -m redlight` works the same as `redlight`. The extras: `audio` is
+pygame for the chant and buzzer (the referee runs silently without it),
+`analysis` is scikit-learn, matplotlib and Jupyter for `redlight benchmark`,
+the figures and the notebook, and `dev` is pytest. Node.js 18 or newer is
+needed only for the browser/Python parity tests, which skip without it.
 
 The YOLO11n weights are committed at `models/yolo11n.pt`, so there is
-nothing to download. (`python scripts/fetch_weights.py` re-fetches them if
-you ever remove the file.)
-
-Play against your webcam:
+nothing to download. The fetch script checks them, and downloads them from
+the pinned Ultralytics release only if the file is missing:
 
 ```bash
-redlight play --source 0
+python scripts/fetch_weights.py
+# already present: .../models/yolo11n.pt (5.6 MB, sha256 0ebbc80d4a7680d14987a577cd21342b65ecfd94632bd9a8da63ae6417644ee1)
 ```
 
-Referee the ground-truth footage instead, deterministically — this is the
-demo match the benchmark publishes, and it prints
-`victory - 9 player(s), 2 survived, 7 eliminated`:
+Run every command from the repository root. The weights path,
+`models/yolo11n.pt`, is relative to the folder you run in; from anywhere
+else Ultralytics first downloads its own copy of `yolo11n.pt` into
+`./models/` (the same 5.6 MB file, but it needs a network connection).
+
+> **If `redlight` fails with `ModuleNotFoundError: No module named 'redlight'`
+> after the install worked,** Python skipped the editable install's `.pth`
+> file. Python 3.13 ignores `.pth` files that carry macOS's hidden flag, and
+> inside a folder that iCloud Drive syncs (Desktop or Documents) that flag can
+> appear on the virtual environment's files a few minutes after the install.
+> Clone somewhere iCloud does not sync, or clear the flag with
+> `chflags nohidden .venv/lib/python3.*/site-packages/*.pth`, or run from the
+> repository root with `export PYTHONPATH=src`. A non-editable
+> `pip install .` is not a fix: `redlight build-site` only works from a
+> source checkout.
+
+### Test
+
+```bash
+pytest                            # 283 passed, about a minute and a half
+pytest -m "not slow"              # 281 passed, 2 deselected: skips the two YOLO passes over the footage
+pytest tests/test_js_parity.py    # the browser/Python parity suite under Node: 17 passed
+```
+
+CI runs the whole suite with nothing skipped: it needs no camera, no GPU
+and no private data, because the weights and the footage are committed. The
+one skip is local: in a copy with no git history (a ZIP download),
+`tests/test_framing.py` skips, because it scans `git ls-files`.
+
+### Play a match
+
+```bash
+redlight play                     # webcam 0, with a window: press S to start, Q to quit
+```
+
+That one needs a camera and a desktop session, so it is the one command
+here that was not run for this README; `--source 1` picks a second camera.
+Everything else runs on the committed footage.
+
+Referee a video file with no window. `--headless` needs `--auto-start N`,
+which starts the match once N frames in a row have seen a player:
+
+```bash
+redlight play --source data/vtest.avi --headless --auto-start 10
+# victory - 5 player(s), 4 survived, 1 eliminated
+```
+
+Without `--seed` the light schedule is random, so that line changes from
+run to run. The seeded demo match the benchmark publishes always ends the
+same way:
 
 ```bash
 redlight play --source data/vtest.avi --headless --mute \
   --seed 3 --skip 200 --auto-start 20 --max-seconds 40 \
   --countdown 1 --duration 12 --phase-min 1.5 --phase-max 3 --grace 0.6 \
   --metric flow --detector yolo --conf 0.35 --confirm-frames 3
+# victory - 9 player(s), 2 survived, 7 eliminated
 ```
 
-Reproduce every number in this README (~2 minutes; `--fast` runs the same
-harness on a 60-frame subset in about 15 seconds):
+Record the annotated match, or swap in the weights-free detector and the
+metric the browser runs:
 
 ```bash
-redlight benchmark --out reports/benchmark_results.json
+redlight play --source data/vtest.avi --headless --auto-start 10 --seed 3 --duration 10 --record match.mp4
+# victory - 5 player(s), 4 survived, 1 eliminated
+redlight play --source data/vtest.avi --headless --auto-start 10 --seed 3 --duration 10 --detector hog --metric diff
+# victory - 5 player(s), 4 survived, 1 eliminated
 ```
 
-Regenerate the playable page and the chant:
+`--record` writes with OpenCV's mp4v codec (`match.mp4` above is 140
+frames, 768 × 576, 10 fps) wherever you point it; left in the repository
+root it shows up in `git status` as untracked. The HOG run takes about 30
+seconds against about 10 for YOLO.
+
+Every `play` flag, with the values the code accepts (`redlight play --help`
+prints the same list):
+
+| Flag | Default | Accepts |
+|---|---|---|
+| `--source` | `0` | a webcam index, a video file path, or a stream URL |
+| `--seed` | none | any integer; leave it out for a new light schedule every run |
+| `--countdown S` | `3.0` | seconds, 0 or more |
+| `--duration S` | `60.0` | seconds of match, 0 or more |
+| `--phase-min S`, `--phase-max S` | `2.0`, `5.0` | seconds per light, above 0, min no larger than max |
+| `--grace S` | `0.6` | seconds after red turns on before anyone can be called, 0 or more |
+| `--metric` | `flow` | `flow` (dense optical flow) or `diff` (changed pixels, the browser's metric) |
+| `--threshold` | `0.0767` | the flow cutoff in body-fractions per second, above 0 |
+| `--diff-threshold` | `0.1455` | the diff cutoff in body-fractions per second, above 0 |
+| `--confirm-frames` | `3` | samples in a row over the cutoff before a call, 1 or more |
+| `--smoothing` | `0.5` | weight on the newest sample, above 0 and at most 1 |
+| `--detector` | `yolo` | `yolo` (YOLO11n) or `hog` (OpenCV's people detector, no weights) |
+| `--conf` | `0.35` | detection cutoff: a 0–1 confidence for YOLO, the raw SVM score for HOG |
+| `--max-misses` | `15` | frames a player can go undetected before they leave the arena |
+| `--headless` | off | no window; needs `--auto-start` |
+| `--record PATH` | none | write the annotated match to an mp4 |
+| `--skip N` | `0` | frames to discard before the match clock starts |
+| `--auto-start N` | none | start once N frames in a row see a player |
+| `--max-seconds S` | none | stop after S seconds of footage and report `aborted` |
+| `--mute` | off | no chant, no buzzer |
+
+A value outside those ranges stops the run with exit status 2 and says
+which one:
 
 ```bash
-redlight build-site --out docs/index.html
-redlight make-audio --out assets/doll_song.wav
+redlight play --smoothing 0
+# error: Configuration errors:
+#   - smoothing must be in (0, 1], got 0.0
 ```
+
+### Reproduce the numbers
+
+```bash
+redlight benchmark --fast --out /tmp/bench-fast.json   # 60 frames, about 15 s
+redlight benchmark --out /tmp/bench.json               # the full harness, about 2 minutes
+```
+
+The benchmark prints nothing and writes one JSON file. Every figure in the
+Results section below is read from `reports/benchmark_results.json`.
+
+That file and the committed figures were produced with torch 2.13.0,
+torchvision 0.28.0, ultralytics 8.4.92, opencv-python 4.13.0.92, NumPy
+2.5.1, scikit-learn 1.9.0 and matplotlib 3.11.0. On those versions a rerun
+matches the file byte for byte apart from the `runtime_ms` timings:
+
+```bash
+pip install "torch==2.13.0" "torchvision==0.28.0" "ultralytics==8.4.92" \
+            "opencv-python==4.13.0.92" "numpy==2.5.1" "scikit-learn==1.9.0" \
+            "matplotlib==3.11.0"
+redlight benchmark --out /tmp/bench.json
+```
+
+A plain install resolves newer releases, and they change a handful of YOLO
+detections. With the versions pip picked on 23 September 2026 (torch 2.14.0,
+ultralytics 8.4.160, opencv-python 4.14.0.94, NumPy 2.5.3), the harness kept
+4407 paired samples instead of 4410, and its midpoint cutoffs came out at
+0.0779 (flow) and 0.1541 (diff) instead of 0.0767 and 0.1455. Every flag
+rate in the tables below moved by less than 0.06 percentage points and every
+AUC by less than 0.0002; the 100.00% frame-rate agreement, the
+background-scenario results and the demo match did not move at all.
+
+> **Before a demo:** `redlight benchmark` without `--out` writes over the
+> committed results. The timings always change, so
+> `test_committed_page_is_up_to_date` fails until you run
+> `redlight build-site` again, and on newer package versions
+> `tests/test_threshold_sync.py` fails as well, because the shipped cutoffs
+> no longer match the file. To put both back:
+> `git checkout -- reports/benchmark_results.json docs/index.html`.
+
+### Build and view the page
+
+```bash
+redlight build-site               # wrote docs/index.html
+```
+
+The build inlines `site/*.css` and `site/*.js` into `site/template.html` and
+bakes in the benchmark results, the chant and the golden judge fixtures. It
+is deterministic: on an unchanged checkout it rewrites `docs/index.html`
+byte for byte and `git status` stays clean. Edit the template and the
+`site/` sources, never the built file.
+
+The page is one self-contained file, so it needs no server:
+
+```bash
+open docs/index.html              # macOS; xdg-open on Linux
+```
+
+A local server is closer to GitHub Pages, and works the same:
+
+```bash
+python3 -m http.server 8310 --bind 127.0.0.1 --directory docs
+open http://localhost:8310/
+```
+
+Add `?selftest=1` to either address and the page replays every golden
+fixture and a scripted match through its own JavaScript, then writes the
+verdict into the tab title: `SELFTEST PASS n=59`. `?theme=light` or
+`?theme=dark` forces a theme.
+
+With Google Chrome or Chromium installed, one script drives the built page
+the way a visitor would — the selftest, a whole match against a fake camera
+(a walker who must be called out and a statue who must survive two red
+lights), and the recorded replay — then saves screenshots of every section
+in both themes to `reports/site/`, which is gitignored:
+
+```bash
+python scripts/verify_site.py
+# PASS  fixture selftest                           SELFTEST PASS n=59
+# PASS  play path reaches a countdown              PROBE LOBBY>camera>COUNTDOWN>GREEN>RED>out:1>GREEN>RED>GREEN>RED
+# PASS  play path reaches a green light            (same probe)
+# PASS  play path covers two red lights            (same probe)
+# PASS  a walking player is called out             (same probe)
+# PASS  a still player survives both red lights    (same probe)
+# PASS  the cutoff is calibrated on the countdown  Calibrated to your camera: cutoff 0.2910. ...
+# PASS  replay runs without a camera               PROBE LOBBY>replay>COUNTDOWN>GREEN>RED>GREEN>RED>GREEN>RED
+# PASS  screenshots written                        16 files
+```
+
+### Figures, chant and notebook
+
+```bash
+python scripts/make_figures.py    # about 90 s; rewrites everything in reports/figures/
+redlight make-audio               # wrote assets/doll_song.wav (5.38s)
+jupyter nbconvert --to notebook --execute notebooks/judge_design.ipynb --output-dir /tmp/nb
+```
+
+On the pinned versions above, `make_figures.py` reproduces every committed
+figure byte for byte. On newer versions the PNG bytes change even where the
+pixels do not, and the ROC curves and HUD stills move slightly with the
+detections, so check `git status` afterwards and
+`git checkout -- reports/figures` if you did not mean to update them. The
+chant is deterministic on any version.
 
 ---
 
@@ -159,7 +362,9 @@ crossing a courtyard at 10 fps, YOLO11n detection at conf 0.35, seed 1729.
 The sampler released 794 pairs. Every walker the tracker held becomes a
 *moving* sample (4410 of them); each is paired with a *frozen* twin — the
 same frame held in place with seeded gaussian sensor grain, sigma 2, on top
-(4410). Reruns are byte-identical apart from the timings.
+(4410). On the package versions listed under
+[Reproduce the numbers](#reproduce-the-numbers), reruns are byte-identical
+apart from the timings.
 
 ### Five designs, same samples
 
@@ -333,6 +538,14 @@ Every one of these is measured or reproducible, not hypothetical.
   press play and grant a camera, and nothing else on the page depends on it
   — every published number, the referee lab, the replay and the selftest run
   with it never loading.
+- **The recorded replay's sidebar is not synced to the video.** Under
+  *Watch a recorded match*, the video is the real recorded run, with its own
+  HUD. The light, doll and countdown beside it run a reconstructed light
+  schedule on the page's clock instead: they start about two seconds ahead
+  of the video, which opens on the lobby, and the reconstructed phase
+  boundaries differ from the recorded ones by up to about half a second. So
+  the sidebar can say red while the video says green. The video's HUD is the
+  record.
 - **The benchmark is one scene.** `data/vtest.avi` is a single outdoor
   courtyard at 10 fps. Every number above describes the judge on that
   footage. Nothing here has been measured across lighting conditions,
@@ -358,24 +571,31 @@ it at people who have not chosen to play.
 ## Repository structure
 
 ```
-src/redlight/       the engine: detection, tracking, judge, game, HUD, CLI,
-                    audio, the benchmark harness, and the site build
-site/               the browser arena: judge, game, pose, arena, lab, charts,
-                    chant, doll, styles, page template
-docs/index.html     the built page, served by GitHub Pages
-docs/DESIGN.md      the design card: pipeline contracts, judge math,
-                    threshold selection, claims and their guarding tests
-notebooks/          judge_design.ipynb — how the judge was arrived at
-reports/            benchmark_results.json and the committed figures
-scripts/            figure rendering, weight fetching, site verification
-tests/              235 tests, including browser/Python parity and framing
-data/, models/      ground-truth footage and the YOLO11n weights
+src/redlight/        the engine: detection, tracking, judge, game, HUD, CLI,
+                     audio, the benchmark harness, and the site build
+site/                the browser arena: judge, game, pose, arena, lab, charts,
+                     chant, doll, confetti, styles, page template
+docs/index.html      the built page, served by GitHub Pages
+docs/                beside it: favicon.svg, og-image.png (the share image),
+                     sitemap.xml, and the recorded match (demo_match.mp4 and
+                     its poster)
+docs/DESIGN.md       the design card: pipeline contracts, judge math,
+                     threshold selection, claims and their guarding tests
+notebooks/           judge_design.ipynb — how the judge was arrived at
+reports/             benchmark_results.json and the committed figures
+scripts/             figure rendering, weight fetching, site verification
+tests/               283 tests, including browser/Python parity, framing and
+                     the page's metadata
+data/, models/       ground-truth footage and the YOLO11n weights
+assets/              the synthesised chant, doll_song.wav
+.github/workflows/   CI: the test suite on Python 3.12 and 3.13
 ```
 
 ## Built with
 
-Python 3.10+, NumPy, OpenCV, Ultralytics YOLO11n, scikit-learn and
-matplotlib for the benchmark and figures, pygame for optional sound. The
+Python (tested on 3.12 and 3.13; the package declares 3.10+), NumPy,
+OpenCV, Ultralytics YOLO11n, scikit-learn and matplotlib for the benchmark
+and figures, pygame for optional sound. The
 browser side is plain JavaScript with no build step — MediaPipe Tasks Vision
 for pose and Chart.js for the result charts, both pinned. Tests are pytest,
 with Node driving the parity suite.
