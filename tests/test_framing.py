@@ -124,6 +124,16 @@ def text_files() -> list[Path]:
     return files
 
 
+if not (REPO_ROOT / ".git").exists():
+    # A ZIP download or a `git archive` copy has no history, so there is no
+    # list of tracked files to scan. Skip loudly rather than fail collection,
+    # which would stop every other test in the suite from running too.
+    pytest.skip(
+        "not a git checkout: this scan reads `git ls-files`, so it only runs "
+        "in a clone of the repository",
+        allow_module_level=True,
+    )
+
 TEXT_FILES = text_files()
 
 
