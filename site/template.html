@@ -698,8 +698,8 @@ pip install -e ".[audio,analysis,dev]"
 # play against your webcam
 redlight play --source 0
 
-# referee a video file, headless, and report
-redlight play --source clip.mp4 --headless
+# referee the included footage, headless, and report
+redlight play --source data/vtest.avi --headless --auto-start 10
 
 # reproduce every number on this page
 redlight benchmark --out reports/benchmark_results.json
