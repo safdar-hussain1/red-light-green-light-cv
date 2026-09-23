@@ -789,7 +789,13 @@ section {
   background: var(--bg-sunk);
   border: 3px solid var(--rule-strong);
   border-radius: var(--radius);
+  /* `clip` rather than `hidden`. `hidden` makes the stage a scroll
+     container, which turns its 4:3 ratio into a fixed height, and on a
+     narrow phone the "Ready when you are" card was cut off. With `clip` the
+     ratio is only the preferred size and the stage grows to fit the card.
+     `hidden` stays first as the fallback for browsers without `clip`. */
   overflow: hidden;
+  overflow: clip;
   display: grid;
   place-items: center;
   isolation: isolate;
@@ -2204,7 +2210,10 @@ input[type="range"] {
 
 .chart-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  /* `min(420px, 100%)`, not a bare 420px: on a phone narrower than one
+     column the track would otherwise stay 420px wide and push the page
+     sideways. */
+  grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr));
   gap: 1.1rem;
 }
 
@@ -2286,6 +2295,8 @@ details.table-view {
   margin-top: 0.9rem;
   border-top: 1px solid var(--rule);
   padding-top: 0.6rem;
+  /* The widest table scrolls inside its card on the narrowest phones. */
+  overflow-x: auto;
 }
 
 details.table-view summary {
