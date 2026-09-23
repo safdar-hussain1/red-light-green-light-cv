@@ -1,14 +1,14 @@
 # Runtime
-numpy>=1.26
+numpy>=1.26,<3
 opencv-python>=4.9,<5
-ultralytics>=8.3
+ultralytics>=8.3,<9
 
 # audio extra
-pygame>=2.5
+pygame>=2.5,<3
 
 # analysis extra: benchmark figures and the design notebook
-matplotlib>=3.8
-scikit-learn>=1.4
+matplotlib>=3.8,<4
+scikit-learn>=1.4,<2
 pillow>=10
 jupyter
 ipykernel
