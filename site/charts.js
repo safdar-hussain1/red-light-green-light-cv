@@ -8,11 +8,11 @@
  * Three decisions are deliberate and worth defending.
  *
  * **Red and green never appear in a chart.** On this page they mean the
- * light and only the light, so the series palette is a validated four-slot
- * set — violet, amber, blue, magenta — held to CVD separation and contrast
- * in both themes. Two of those slots sit under 3:1 on the light surface, so
- * every chart that uses them carries direct value labels and a table view;
- * nothing is gated behind picking a colour out of a legend.
+ * light and only the light, and pink means something a visitor can press,
+ * so the series palette is a fixed four-slot set — teal, amber, blue,
+ * violet — kept apart from all three in both themes. Every chart carries
+ * direct value labels and a table view, so nothing is gated behind picking
+ * a colour out of a legend.
  *
  * **Runtime is two charts, not one.** A detector costs tens of milliseconds
  * a frame and a scoring metric costs fractions of one per player. Putting
@@ -59,7 +59,7 @@ function chartTheme() {
     inkDim: cssVar("--ink-mute"),
     grid: cssVar("--rule"),
     surface: cssVar("--surface"),
-    mono: cssVar("--font-mono"),
+    font: cssVar("--font-body"),
   };
 }
 
@@ -77,7 +77,7 @@ const valueLabels = {
     const suffix = options.suffix || "";
     const digits = options.digits === undefined ? 1 : options.digits;
     ctx.save();
-    ctx.font = "600 10px " + chartTheme().mono;
+    ctx.font = "600 10px " + chartTheme().font;
     ctx.fillStyle = chartTheme().inkDim;
 
     chart.data.datasets.forEach((dataset, index) => {
@@ -118,8 +118,8 @@ function baseOptions(theme, { indexAxis, suffix, digits, max, axisTitle }) {
         backgroundColor: theme.ink,
         titleColor: theme.surface,
         bodyColor: theme.surface,
-        titleFont: { family: theme.mono, size: 11 },
-        bodyFont: { family: theme.mono, size: 11 },
+        titleFont: { family: theme.font, size: 11 },
+        bodyFont: { family: theme.font, size: 11 },
         padding: 8,
         displayColors: true,
         callbacks: {
@@ -144,10 +144,10 @@ function baseOptions(theme, { indexAxis, suffix, digits, max, axisTitle }) {
         border: { color: theme.grid },
         ticks: {
           color: theme.inkDim,
-          font: { family: theme.mono, size: 10 },
+          font: { family: theme.font, size: 10 },
         },
         title: indexAxis === "y" && axisTitle
-          ? { display: true, text: axisTitle, color: theme.inkDim, font: { family: theme.mono, size: 10 } }
+          ? { display: true, text: axisTitle, color: theme.inkDim, font: { family: theme.font, size: 10 } }
           : undefined,
       },
       y: {
@@ -157,10 +157,10 @@ function baseOptions(theme, { indexAxis, suffix, digits, max, axisTitle }) {
         border: { color: theme.grid },
         ticks: {
           color: theme.inkDim,
-          font: { family: theme.mono, size: 10 },
+          font: { family: theme.font, size: 10 },
         },
         title: indexAxis !== "y" && axisTitle
-          ? { display: true, text: axisTitle, color: theme.inkDim, font: { family: theme.mono, size: 10 } }
+          ? { display: true, text: axisTitle, color: theme.inkDim, font: { family: theme.font, size: 10 } }
           : undefined,
       },
     },
@@ -366,8 +366,8 @@ class Results {
     ]
       .map(
         ([key, value]) =>
-          '<div class="stat"><span class="k">' + key + '</span><span class="v">' + value +
-          "</span></div>"
+          '<div class="stat"><dt class="k">' + key + '</dt><dd class="v">' + value +
+          "</dd></div>"
       )
       .join("");
   }
@@ -447,7 +447,23 @@ class Results {
 
 document.addEventListener("DOMContentLoaded", () => {
   if (!window.RL_DATA || !document.getElementById("results")) return;
-  // Chart.js is deferred, so it is present by the time this fires; the guard
-  // in `render` covers the case where the CDN did not answer at all.
-  new Results(window.RL_DATA);
+  // The charts live on the measurements view, which starts hidden, and a
+  // chart laid out inside a hidden element measures itself as zero by zero.
+  // So they are built the first time that view is on screen, and a visitor
+  // who never opens it never pays for them. Chart.js is deferred, so it is
+  // present by then; the guard in `render` covers a CDN that never answered.
+  let built = false;
+  const build = () => {
+    if (built) return;
+    built = true;
+    new Results(window.RL_DATA);
+  };
+  const view = document.getElementById("measurements");
+  if (!view || view.getClientRects().length > 0) {
+    build();
+    return;
+  }
+  window.addEventListener("rl-view", (event) => {
+    if (event.detail === "measurements") build();
+  });
 });

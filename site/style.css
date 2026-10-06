@@ -1,550 +1,1732 @@
 /*
- * The arena's look: a painted playground court, refereed by an instrument.
+ * The arena's look: a painted playground, refereed by a machine.
  *
- * Two vocabularies are held against each other on purpose. The playground
- * half is poster type, thick painted court lines, flat blocks of colour, a
- * doll drawn in a few strokes. The instrument half is monospace telemetry —
- * every number the referee acts on is set in a fixed-pitch face, in the unit
- * it is measured in. Nothing on the page is decorative colour: red and green
- * mean the light, and only the light. Violet is the one interactive accent,
- * so anything violet is something a visitor can move.
+ * The page is built around the one thing every player watches, the light.
+ * Red and green mean the light and nothing else: the sign in the headline,
+ * the lamp behind the doll, the edge of the stage and the calls on it all
+ * change together, and no button, link or chart uses either colour. Pink is
+ * the colour of things a visitor can press. Teal is the players' tracksuits,
+ * and the doll's orange and yellow are her own paint, the same in either
+ * theme.
  *
- * Both themes are declared in full. `:root` carries the day-game palette,
- * the dark palette is redefined under `prefers-color-scheme` (guarded so an
- * explicit light stamp still wins) and again under `[data-theme="dark"]` so
+ * Two surfaces carry the page. The hero is the arena itself: a wall painted
+ * to look like sky over a sand field, by day or under floodlights. The
+ * console that sits on that field is always dark, the way a scoreboard is,
+ * so camera footage, drawn players and recorded video all read the same way
+ * inside it whichever theme is on.
+ *
+ * Both themes are declared in full. `:root` carries the day palette; the
+ * night palette is redefined under `prefers-color-scheme` (guarded so an
+ * explicit light stamp still wins) and again under `[data-theme="dark"]`, so
  * the toggle beats the system in both directions.
  */
+
+/* ----------------------------------------------------------------- fonts */
+
+@font-face {
+  font-family: "Black Han Sans";
+  src: url("fonts/black-han-sans.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "IBM Plex Sans KR";
+  src: url("fonts/ibm-plex-sans-kr-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "IBM Plex Sans KR";
+  src: url("fonts/ibm-plex-sans-kr-600.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
 
 /* ---------------------------------------------------------------- tokens */
 
 :root {
   color-scheme: light;
 
-  /* Court surfaces: chalky painted asphalt, chalk-white panels. */
-  --bg: #e4e9e2;
-  --bg-sunk: #d7ddd5;
-  --surface: #f7f9f5;
-  --surface-2: #eceee7;
+  /* The painted wall and the field in front of it. */
+  --sky-1: #5fb2dc;
+  --sky-2: #a9d9ef;
+  --sky-3: #e2f3fa;
+  --cloud: #ffffff;
+  --cloud-alpha: 1;
+  --sand-1: #ecd8ac;
+  --sand-2: #dcbf86;
+  --sand-edge: #c9a96c;
 
-  --ink: #14201d;
-  --ink-2: #476059;
-  --ink-mute: #6d817b;
+  --bg: #eef4f5;
+  --surface: #ffffff;
+  --surface-2: #f4f8f9;
+  --ink: #0c2327;
+  --ink-2: #33525a;
+  --ink-mute: #4f6d74;
+  --rule: rgba(12, 35, 39, 0.12);
+  --rule-strong: rgba(12, 35, 39, 0.3);
+  --sign-off: rgba(12, 35, 39, 0.4);
 
-  --rule: rgba(20, 32, 29, 0.16);
-  --rule-strong: rgba(20, 32, 29, 0.46);
+  /* Things a visitor can press. */
+  --pink: #d1185f;
+  --pink-deep: #8f0c3f;
+  --pink-ink: #ffffff;
+  --pink-text: #b0124f;
+  --focus: #d1185f;
 
-  /* The light. Loud by design — a player reads it in peripheral vision. */
-  --red: #c62a1e;
-  --green: #12723a;
-  --red-lit: #ef3b2c;
-  --green-lit: #17a34a;
-  --red-wash: rgba(239, 59, 44, 0.13);
-  --green-wash: rgba(23, 163, 74, 0.13);
+  /* The light. Loud by design: a player reads it in peripheral vision. */
+  --red-lit: #e3342b;
+  --green-lit: #12a150;
+  --red-text: #b42318;
+  --green-text: #0a7638;
 
-  /* The one interactive accent. Violet means "you can move this". */
-  --accent: #4a3aa7;
-  --accent-ink: #ffffff;
-  --accent-soft: #e0dcf6;
+  /* Paint that belongs to the game, not to the theme. */
+  --teal: #0f7a6c;
+  --teal-bright: #22a08d;
+  --orange: #f08a24;
+  --yellow: #ffc531;
 
-  /* Chart series, in fixed order. Validated for this surface in both
-     themes; slots 2 and 4 sit under 3:1, so every chart that uses them
-     ships direct labels and a table view. */
-  --s1: #4a3aa7;
-  --s2: #eda100;
-  --s3: #2a78d6;
-  --s4: #e87ba4;
+  /* The console: always dark, like a scoreboard. */
+  --console: #0d2026;
+  --console-2: #13303a;
+  --console-3: #1a3a45;
+  --console-ink: #eaf5f5;
+  --console-ink-2: #a9c3c7;
+  --console-rule: rgba(234, 245, 245, 0.12);
+  --stage-bg: #061217;
+  --red-on-dark: #ff6f61;
+  --led-on: #ff3b2f;
+  --led-off: rgba(255, 59, 47, 0.09);
+  --lamp-off: #2f454c;
 
-  --font-display: Impact, Haettenschweiler, "Arial Narrow Bold", "Arial Narrow",
-    "Franklin Gothic Bold", sans-serif;
-  --font-body: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
-    "Liberation Mono", monospace;
+  /* Chart series, in fixed order: no red, no green, no pink. */
+  --s1: #0f7a6c;
+  --s2: #b86e00;
+  --s3: #2a63c6;
+  --s4: #8a4fd0;
+  --accent: var(--pink);
+  --accent-ink: var(--pink-ink);
 
-  --radius: 14px;
-  --radius-sm: 8px;
-  --pad: clamp(1rem, 2.6vw, 1.75rem);
-  --gutter: clamp(1rem, 4vw, 2.5rem);
-  --measure: 64ch;
-  --shadow: 0 1px 0 rgba(20, 32, 29, 0.06), 0 12px 30px -22px rgba(20, 32, 29, 0.5);
+  --font-display: "Black Han Sans", "Arial Black", Impact, sans-serif;
+  --font-body: "IBM Plex Sans KR", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-code: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono",
+    monospace;
+
+  --gutter: clamp(16px, 4vw, 40px);
+  --radius: 18px;
+  --radius-sm: 10px;
+  --shadow: 0 1px 0 rgba(12, 35, 39, 0.05), 0 18px 40px -30px rgba(12, 35, 39, 0.55);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
 
-    --bg: #0d1815;
-    --bg-sunk: #081110;
-    --surface: #122320;
-    --surface-2: #182e29;
+    --sky-1: #040d16;
+    --sky-2: #0a2234;
+    --sky-3: #133349;
+    --cloud: #9fc9e0;
+    --cloud-alpha: 0.08;
+    --sand-1: #2b261d;
+    --sand-2: #191611;
+    --sand-edge: #3b3325;
 
-    --ink: #e7efea;
-    --ink-2: #a5b9b2;
-    --ink-mute: #82978f;
+    --bg: #071319;
+    --surface: #0d1f26;
+    --surface-2: #10262e;
+    --ink: #e6f2f2;
+    --ink-2: #aac3c7;
+    --ink-mute: #8ea9ad;
+    --rule: rgba(230, 242, 242, 0.12);
+    --rule-strong: rgba(230, 242, 242, 0.32);
+    --sign-off: rgba(230, 242, 242, 0.34);
 
-    --rule: rgba(231, 239, 234, 0.14);
-    --rule-strong: rgba(231, 239, 234, 0.42);
+    --pink: #ff5c9b;
+    --pink-deep: #a3174f;
+    --pink-ink: #26040f;
+    --pink-text: #ff86b3;
+    --focus: #ff86b3;
 
-    --red: #ff6a5c;
-    --green: #3ad573;
     --red-lit: #ff4b3e;
-    --green-lit: #2fcb67;
-    --red-wash: rgba(255, 75, 62, 0.16);
-    --green-wash: rgba(47, 203, 103, 0.14);
+    --green-lit: #36d07c;
+    --red-text: #ff7d72;
+    --green-text: #5fe39b;
 
-    --accent: #a191ff;
-    --accent-ink: #150f33;
-    --accent-soft: #241d4f;
+    --console: #0a1a20;
+    --console-2: #10272f;
+    --console-3: #17343e;
 
-    --s1: #9085e9;
-    --s2: #c98500;
-    --s3: #3987e5;
-    --s4: #d55181;
+    --s1: #39c3ae;
+    --s2: #e3a640;
+    --s3: #6ea3f4;
+    --s4: #b88cf2;
 
-    --shadow: 0 1px 0 rgba(0, 0, 0, 0.3), 0 16px 34px -24px rgba(0, 0, 0, 0.9);
+    --shadow: 0 1px 0 rgba(0, 0, 0, 0.3), 0 18px 40px -26px rgba(0, 0, 0, 0.9);
   }
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  --bg: #0d1815;
-  --bg-sunk: #081110;
-  --surface: #122320;
-  --surface-2: #182e29;
+  --sky-1: #040d16;
+  --sky-2: #0a2234;
+  --sky-3: #133349;
+  --cloud: #9fc9e0;
+  --cloud-alpha: 0.08;
+  --sand-1: #2b261d;
+  --sand-2: #191611;
+  --sand-edge: #3b3325;
 
-  --ink: #e7efea;
-  --ink-2: #a5b9b2;
-  --ink-mute: #82978f;
+  --bg: #071319;
+  --surface: #0d1f26;
+  --surface-2: #10262e;
+  --ink: #e6f2f2;
+  --ink-2: #aac3c7;
+  --ink-mute: #8ea9ad;
+  --rule: rgba(230, 242, 242, 0.12);
+  --rule-strong: rgba(230, 242, 242, 0.32);
+  --sign-off: rgba(230, 242, 242, 0.34);
 
-  --rule: rgba(231, 239, 234, 0.14);
-  --rule-strong: rgba(231, 239, 234, 0.42);
+  --pink: #ff5c9b;
+  --pink-deep: #a3174f;
+  --pink-ink: #26040f;
+  --pink-text: #ff86b3;
+  --focus: #ff86b3;
 
-  --red: #ff6a5c;
-  --green: #3ad573;
   --red-lit: #ff4b3e;
-  --green-lit: #2fcb67;
-  --red-wash: rgba(255, 75, 62, 0.16);
-  --green-wash: rgba(47, 203, 103, 0.14);
+  --green-lit: #36d07c;
+  --red-text: #ff7d72;
+  --green-text: #5fe39b;
 
-  --accent: #a191ff;
-  --accent-ink: #150f33;
-  --accent-soft: #241d4f;
+  --console: #0a1a20;
+  --console-2: #10272f;
+  --console-3: #17343e;
 
-  --s1: #9085e9;
-  --s2: #c98500;
-  --s3: #3987e5;
-  --s4: #d55181;
+  --s1: #39c3ae;
+  --s2: #e3a640;
+  --s3: #6ea3f4;
+  --s4: #b88cf2;
 
-  --shadow: 0 1px 0 rgba(0, 0, 0, 0.3), 0 16px 34px -24px rgba(0, 0, 0, 0.9);
+  --shadow: 0 1px 0 rgba(0, 0, 0, 0.3), 0 18px 40px -26px rgba(0, 0, 0, 0.9);
 }
 
-/* ------------------------------------------------------------- structure */
+/* ------------------------------------------------------------------ base */
 
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 html {
-  -webkit-text-size-adjust: 100%;
   scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
   margin: 0;
-  /* Explicit in both themes: the page never borrows a background. */
-  background-color: var(--bg);
+  background: var(--bg);
   color: var(--ink);
-  font: 16px/1.62 var(--font-body);
-  padding: 0 var(--gutter) 0;
-  overflow-x: hidden;
+  font: 400 1.0625rem/1.6 var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 h1,
 h2,
-h3 {
-  margin: 0 0 0.4em;
-  line-height: 1.05;
-  text-wrap: balance;
-}
-
-h2 {
-  font-family: var(--font-display);
-  font-weight: 400;
-  font-size: clamp(1.9rem, 4.6vw, 3rem);
-  letter-spacing: 0.012em;
-  text-transform: uppercase;
-}
-
-h3 {
-  font-size: 1.02rem;
-  letter-spacing: 0.01em;
-  line-height: 1.3;
-}
-
+h3,
 p {
-  margin: 0 0 1em;
-  max-width: var(--measure);
+  margin: 0;
 }
 
 a {
-  color: var(--accent);
-  text-underline-offset: 3px;
+  color: inherit;
 }
 
-:focus-visible {
-  outline: 3px solid var(--accent);
-  outline-offset: 3px;
-  border-radius: 3px;
-}
-
-code,
-.mono {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
+button {
+  font: inherit;
+  color: inherit;
 }
 
 code {
+  font-family: var(--font-code);
   font-size: 0.9em;
-  background: var(--surface-2);
-  border: 1px solid var(--rule);
-  border-radius: 5px;
-  padding: 0.08em 0.34em;
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+  border-radius: 6px;
 }
 
 .wrap {
-  max-width: 1180px;
-  margin: 0 auto;
+  width: min(100% - 2 * var(--gutter), 1140px);
+  margin-inline: auto;
+}
+
+.icon {
+  width: 1.25em;
+  height: 1.25em;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.icon-sprite {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .skip-link {
   position: absolute;
-  left: -9999px;
-  top: 0;
-  background: var(--accent);
-  color: var(--accent-ink);
+  left: var(--gutter);
+  top: -4rem;
+  z-index: 50;
   padding: 0.6rem 1rem;
-  border-radius: 0 0 var(--radius-sm) 0;
-  z-index: 40;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--bg);
+  font-weight: 600;
+  text-decoration: none;
 }
 
 .skip-link:focus {
-  left: 0;
+  top: 0.75rem;
 }
 
-/* Section framing. The eyebrow is a painted touchline: a mono label sitting
-   on a heavy rule, the way a court marking carries a name. */
-section {
-  padding: clamp(2.5rem, 6vw, 4.25rem) 0 0;
+/* --------------------------------------------------------------- top bar */
+
+.topbar {
+  position: absolute;
+  inset: 0 0 auto 0;
+  z-index: 20;
+  padding: 18px 0;
 }
 
-.eyebrow {
+.topbar-inner {
   display: flex;
   align-items: center;
-  gap: 0.7rem;
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--ink-mute);
-  margin: 0 0 0.9rem;
-  max-width: none;
+  gap: clamp(12px, 2.4vw, 28px);
 }
 
-.eyebrow::after {
-  content: "";
-  flex: 1;
-  height: 3px;
-  background: var(--rule-strong);
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 1rem;
+  margin-right: auto;
+  border-radius: 999px;
 }
 
-.lede {
-  color: var(--ink-2);
-  font-size: clamp(1rem, 1.6vw, 1.12rem);
-  max-width: 58ch;
+/* A small lamp that shows the same light as the big one. */
+.brand-lamp {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--lamp-off);
+  box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.18);
+  transition: background-color 120ms linear, box-shadow 120ms linear;
 }
 
-.note {
-  color: var(--ink-mute);
-  font-size: 0.86rem;
-  line-height: 1.55;
+.brand-lamp[data-phase="GREEN"] {
+  background: var(--green-lit);
+  box-shadow: 0 0 12px var(--green-lit);
 }
 
-.panel {
+.brand-lamp[data-phase="RED"] {
+  background: var(--red-lit);
+  box-shadow: 0 0 12px var(--red-lit);
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: clamp(10px, 2vw, 24px);
+}
+
+.nav a {
+  font-size: 0.95rem;
+  text-decoration: none;
+  color: var(--ink);
+  padding: 0.35rem 0.1rem;
+  border-bottom: 2px solid transparent;
+  transition: color 150ms ease, border-color 150ms ease;
+}
+
+.nav a:hover {
+  border-bottom-color: var(--rule-strong);
+}
+
+.nav a[aria-current="page"] {
+  color: var(--ink);
+  border-bottom-color: var(--pink);
+}
+
+.nav-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--rule-strong);
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  color: var(--ink);
+  cursor: pointer;
+  transition: background-color 150ms ease, transform 150ms ease;
+}
+
+.icon-btn:hover {
   background: var(--surface);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius);
-  padding: var(--pad);
-  box-shadow: var(--shadow);
 }
 
-.stack > * + * {
-  margin-top: 1.1rem;
+.icon-btn:active {
+  transform: scale(0.94);
 }
 
-/* ---------------------------------------------------------------- header */
-
-.brandbar {
-  display: flex;
-  align-items: center;
-  gap: 0.85rem;
-  padding: 1.1rem 0;
-  border-bottom: 3px solid var(--rule-strong);
+/* The toggle shows the theme it will switch to. */
+.icon-btn .icon-sun {
+  display: none;
 }
 
-.brandbar .mark {
-  font-family: var(--font-display);
-  font-size: 1.1rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding: 0.15rem 0.5rem;
-  border: 2px solid var(--ink);
-  border-radius: 4px;
-}
-
-.brandbar .tag {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--ink-mute);
-}
-
-.brandbar .spacer {
-  flex: 1;
-}
-
-.masthead {
-  display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
-  gap: clamp(1.5rem, 4vw, 3rem);
-  align-items: center;
-  padding: clamp(2rem, 5vw, 3.5rem) 0 clamp(2rem, 4vw, 3rem);
-}
-
-.title {
-  font-family: var(--font-display);
-  font-weight: 400;
-  text-transform: uppercase;
-  font-size: clamp(3.1rem, 11.5vw, 7.4rem);
-  letter-spacing: 0.005em;
-  line-height: 0.86;
-  margin: 0 0 1.1rem;
-}
-
-.title span {
+:root[data-theme="dark"] .icon-btn .icon-sun {
   display: block;
 }
 
-.title .w-red {
-  color: var(--red);
+:root[data-theme="dark"] .icon-btn .icon-moon {
+  display: none;
 }
 
-.title .w-green {
-  color: var(--green);
-}
-
-/* The title reacts to the demo light, so the page is playing the game with
-   the visitor before they press anything. The word whose light is off goes
-   hollow — an unlit sign rather than a greyed-out one, which is what a
-   dimmed word would read as in a still frame. */
-.masthead[data-demo="RED"] .title .w-green,
-.masthead[data-demo="GREEN"] .title .w-red {
-  color: transparent;
-  -webkit-text-stroke: 2px var(--ink);
-  opacity: 0.5;
-}
-
-.title .w-red,
-.title .w-green {
-  transition: color 260ms ease, opacity 260ms ease;
-}
-
-/* Hover the title and the light source crosses it once, the way a raking
-   lamp crosses a painted sign. Hover only, and once — this is the page
-   acknowledging a cursor, not asking for attention. */
-.title:hover span {
-  animation: press-shimmer 1.7s ease-in-out;
-}
-
-@keyframes press-shimmer {
-  0%,
-  100% {
-    text-shadow:
-      -1px -1px 0 rgba(255, 255, 255, 0.4),
-      1px 1px 0 rgba(0, 0, 0, 0.22);
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .icon-btn .icon-sun {
+    display: block;
   }
-  50% {
-    text-shadow:
-      1px 1px 0 rgba(255, 255, 255, 0.4),
-      -1px -1px 0 rgba(0, 0, 0, 0.22);
+
+  :root:not([data-theme="light"]) .icon-btn .icon-moon {
+    display: none;
   }
+}
+
+/* --------------------------------------------------------------- buttons */
+
+/* Chunky, game-show buttons: a hard edge under each one, so a press reads as
+   a press. */
+.btn {
+  --edge: rgba(12, 35, 39, 0.28);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  min-height: 50px;
+  padding: 0.8rem 1.35rem;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  font: 600 1rem/1.1 var(--font-body);
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 5px 0 var(--edge);
+  transform: translateY(0);
+  transition: transform 120ms ease, box-shadow 120ms ease, background-color 150ms ease;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 0 var(--edge);
+}
+
+.btn:active {
+  transform: translateY(4px);
+  box-shadow: 0 1px 0 var(--edge);
+}
+
+.btn:disabled {
+  cursor: progress;
+  opacity: 0.7;
+  transform: none;
+}
+
+.btn-primary {
+  --edge: var(--pink-deep);
+  background: var(--pink);
+  color: var(--pink-ink);
+}
+
+.btn-secondary {
+  background: var(--surface);
+  color: var(--ink);
+  border-color: var(--rule-strong);
+}
+
+.btn-outline {
+  background: transparent;
+  color: var(--ink);
+  border-color: var(--ink);
+  --edge: var(--rule-strong);
+}
+
+.btn-small {
+  min-height: 40px;
+  padding: 0.5rem 1rem;
+  font-size: 0.92rem;
+  background: var(--surface-2);
+  color: var(--ink);
+  border-color: var(--rule-strong);
+  box-shadow: 0 3px 0 var(--edge);
 }
 
 .cta-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.7rem;
-  margin: 1.4rem 0 0;
+  gap: 14px;
 }
 
-.btn {
-  font-family: var(--font-body);
-  font-size: 0.95rem;
-  font-weight: 620;
-  letter-spacing: 0.01em;
-  padding: 0.72rem 1.15rem;
+.text-link {
+  color: var(--pink-text);
+  font-weight: 600;
+  text-underline-offset: 3px;
+}
+
+/* ------------------------------------------------------------------ hero */
+
+.hero {
+  position: relative;
+  overflow: hidden;
+  overflow: clip;
+  padding: 104px 0 56px;
+  background: linear-gradient(180deg, var(--sky-1) 0%, var(--sky-2) 38%, var(--sky-3) 62%);
+  isolation: isolate;
+}
+
+/* Clouds, painted flat the way they are on the arena's walls. */
+.sky {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+}
+
+.cloud {
+  position: absolute;
+  height: 26px;
   border-radius: 999px;
-  border: 2px solid transparent;
-  background: var(--surface);
+  background: var(--cloud);
+  opacity: var(--cloud-alpha);
+}
+
+.cloud::before,
+.cloud::after {
+  content: "";
+  position: absolute;
+  bottom: 30%;
+  border-radius: 50%;
+  background: var(--cloud);
+}
+
+.cloud::before {
+  left: 16%;
+  width: 46%;
+  aspect-ratio: 1;
+}
+
+.cloud::after {
+  left: 48%;
+  width: 32%;
+  aspect-ratio: 1;
+}
+
+/* Placed in the sky the words leave empty: over the sign, between the sign
+   and the menu, and peeking out from behind the console's two edges.
+   Offsets are measured from the middle of the page, where the content
+   column is, so the clouds stay clear of the text at any width. */
+.cloud-a {
+  top: 96px;
+  left: calc(50% - 420px);
+  width: 120px;
+}
+
+.cloud-b {
+  top: 70px;
+  left: calc(50% - 60px);
+  width: 100px;
+}
+
+.cloud-c {
+  top: 440px;
+  right: calc(50% - 760px);
+  width: 200px;
+}
+
+.cloud-d {
+  top: 560px;
+  left: calc(50% - 760px);
+  width: 120px;
+}
+
+/* The field the console stands on, starting where the painted wall meets the
+   ground. */
+.field {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 44%;
+  z-index: -1;
+  background:
+    radial-gradient(70% 90% at 50% 0%, rgba(255, 255, 255, 0.16), transparent 70%),
+    linear-gradient(180deg, var(--sand-1), var(--sand-2));
+  border-top: 6px solid var(--sand-edge);
+}
+
+.hero-inner {
+  position: relative;
+}
+
+.hero-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: clamp(24px, 4vw, 56px);
+  align-items: end;
+}
+
+/* The sign: both lights, one of them lit. */
+.sign {
+  display: grid;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(3rem, 7.2vw, 6.4rem);
+  line-height: 0.9;
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+}
+
+.sign-line {
+  display: block;
+  color: transparent;
+  -webkit-text-stroke: 2px var(--sign-off);
+  transition: color 90ms linear, text-shadow 90ms linear, -webkit-text-stroke-color 90ms linear;
+}
+
+.sign[data-lit="red"] .sign-red {
+  color: var(--red-lit);
+  -webkit-text-stroke-color: transparent;
+  text-shadow: 0 0 0.32em color-mix(in srgb, var(--red-lit) 50%, transparent);
+  animation: ignite 300ms linear;
+}
+
+.sign[data-lit="green"] .sign-green {
+  color: var(--green-lit);
+  -webkit-text-stroke-color: transparent;
+  text-shadow: 0 0 0.32em color-mix(in srgb, var(--green-lit) 45%, transparent);
+  animation: ignite 300ms linear;
+}
+
+/* A lamp catching: two flickers, then on. */
+@keyframes ignite {
+  0% {
+    opacity: 0.35;
+  }
+  18% {
+    opacity: 1;
+  }
+  30% {
+    opacity: 0.5;
+  }
+  48%,
+  100% {
+    opacity: 1;
+  }
+}
+
+.hero-copy {
+  display: grid;
+  gap: 18px;
+  justify-items: start;
+  padding-bottom: 6px;
+  max-width: 34rem;
+}
+
+.lede {
+  font-size: clamp(1.1rem, 1.5vw, 1.24rem);
+  line-height: 1.55;
   color: var(--ink);
-  cursor: pointer;
+}
+
+.privacy-line {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  text-decoration: none;
-  white-space: nowrap;
-  transition: transform 120ms ease, background-color 160ms ease,
-    border-color 160ms ease;
+  font-size: 0.92rem;
+  color: var(--ink-2);
 }
 
-.btn:hover {
-  transform: translateY(-1px);
-}
+/* --------------------------------------------------------------- console */
 
-.btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-  transform: none;
-}
-
-.btn-play {
-  background: var(--green-lit);
-  color: #04120a;
-  font-family: var(--font-display);
-  font-weight: 400;
-  font-size: 1.5rem;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  padding: 0.55rem 1.6rem 0.5rem;
-}
-
-.btn-ghost {
-  background: transparent;
-  border-color: var(--rule-strong);
-  color: var(--ink);
-}
-
-.btn-quiet {
-  background: var(--surface-2);
-  border-color: var(--rule);
-  font-size: 0.84rem;
-  padding: 0.45rem 0.85rem;
-}
-
-.btn-icon {
-  padding: 0.45rem 0.7rem;
-  background: transparent;
-  border-color: var(--rule-strong);
-  font-size: 0.8rem;
-  font-family: var(--font-mono);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-/* Three facts the whole page rests on, set as instrument readings. */
-.specstrip {
+.console {
+  position: relative;
+  margin-top: clamp(28px, 4vw, 44px);
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1px;
-  margin: 1.8rem 0 0;
-  background: var(--rule);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-sm);
+  grid-template-columns: minmax(0, 1fr) 286px;
+  gap: 14px;
+  padding: 14px;
+  border-radius: 24px;
+  background: var(--console);
+  color: var(--console-ink);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.05) inset,
+    0 50px 80px -46px rgba(3, 16, 20, 0.85),
+    0 18px 30px -24px rgba(3, 16, 20, 0.6);
+}
+
+/* Rows hold their own height. Stretched to a taller referee panel, the
+   stage's 4:3 ratio would turn the extra height into extra width and push
+   it out of its column. */
+.stage-col {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+/* ----------------------------------------------------------------- stage */
+
+.stage {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  width: 100%;
+  border-radius: 14px;
+  background: var(--stage-bg);
+  overflow: hidden;
+  overflow: clip;
+  isolation: isolate;
+  box-shadow: 0 0 0 3px var(--console-3);
+  transition: box-shadow 160ms linear;
+}
+
+.stage[data-phase="GREEN"] {
+  box-shadow: 0 0 0 3px var(--green-lit), 0 0 44px -10px var(--green-lit);
+}
+
+.stage[data-phase="RED"] {
+  box-shadow: 0 0 0 3px var(--red-lit), 0 0 44px -10px var(--red-lit);
+}
+
+.demo-canvas,
+#cam,
+.replay-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  display: none;
+}
+
+.stage[data-mode="demo"] .demo-canvas {
+  display: block;
+}
+
+/* The camera is mirrored for the player's benefit; the overlay boxes are
+   mirrored by arithmetic instead, so their labels still read forwards. */
+#cam {
+  object-fit: cover;
+  transform: scaleX(-1);
+  background: #000;
+}
+
+.stage[data-mode="camera"][data-live="true"] #cam {
+  display: block;
+}
+
+.replay-video {
+  object-fit: contain;
+  background: #000;
+}
+
+.stage[data-mode="replay"] .replay-video {
+  display: block;
+}
+
+.demo-canvas,
+#cam,
+.replay-video,
+.overlay {
+  transition: filter 260ms ease;
+}
+
+/* The light, on the footage: green is open and warm, red narrows in. */
+.stage::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 220ms ease;
+}
+
+.stage[data-phase="GREEN"]::before {
+  opacity: 1;
+  background: radial-gradient(140% 100% at 50% 120%, rgba(54, 208, 124, 0.14), transparent 70%);
+}
+
+.stage[data-phase="RED"]::before {
+  opacity: 1;
+  background:
+    radial-gradient(110% 86% at 50% 46%, transparent 40%, rgba(70, 6, 3, 0.5) 100%),
+    radial-gradient(90% 60% at 50% -10%, rgba(255, 75, 62, 0.2), transparent 60%);
+}
+
+/* The freeze at the green-to-red snap: for a quarter of a second the picture
+   stops looking live and starts looking like evidence. */
+.stage[data-freeze="true"] .demo-canvas,
+.stage[data-freeze="true"] #cam,
+.stage[data-freeze="true"] .replay-video {
+  filter: grayscale(0.85) contrast(1.3) brightness(1.08);
+}
+
+/* While a red light is armed the referee is reading every player: a slow red
+   sweep across the stage says so. */
+.scan {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 200ms linear;
+}
+
+.scan::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 18%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--red-lit) 7%, transparent) 75%,
+    color-mix(in srgb, var(--red-lit) 55%, transparent) 99%,
+    transparent
+  );
+  animation: scan-sweep 2.6s ease-in-out infinite alternate;
+}
+
+.stage[data-armed="true"] .scan {
+  opacity: 1;
+}
+
+@keyframes scan-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(560%);
+  }
+}
+
+.stage[data-outcome="WIPEOUT"]::before {
+  opacity: 1;
+  background: radial-gradient(102% 78% at 50% 46%, rgba(0, 0, 0, 0.25) 6%, rgba(0, 0, 0, 0.88) 94%);
+}
+
+.stage[data-outcome="WIPEOUT"] .demo-canvas,
+.stage[data-outcome="WIPEOUT"] #cam,
+.stage[data-outcome="WIPEOUT"] .overlay {
+  filter: brightness(0.3) saturate(0.15);
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+
+/* What the stage is showing, in two words. */
+.stage-badge {
+  position: absolute;
+  z-index: 5;
+  left: 12px;
+  top: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.38rem 0.8rem 0.38rem 0.65rem;
+  border-radius: 999px;
+  background: rgba(4, 14, 18, 0.72);
+  color: #f2fbfb;
+  font-size: 0.85rem;
+  font-weight: 600;
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+}
+
+.badge-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--yellow);
+}
+
+.stage[data-mode="camera"] .badge-dot {
+  background: var(--pink);
+  animation: live-dot 1.6s ease-in-out infinite;
+}
+
+.stage[data-mode="replay"] .badge-dot {
+  background: #f2fbfb;
+}
+
+@keyframes live-dot {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* One box per player: viewfinder corners, so the player stays visible inside
+   it. The corners take the state colour; the faint full edge only places the
+   box. */
+.player-box {
+  --c: rgba(255, 255, 255, 0.95);
+  --l: 16px;
+  --w: 3px;
+  position: absolute;
+  border-radius: 6px;
+  background:
+    linear-gradient(var(--c) 0 0) top left / var(--l) var(--w),
+    linear-gradient(var(--c) 0 0) top left / var(--w) var(--l),
+    linear-gradient(var(--c) 0 0) top right / var(--l) var(--w),
+    linear-gradient(var(--c) 0 0) top right / var(--w) var(--l),
+    linear-gradient(var(--c) 0 0) bottom left / var(--l) var(--w),
+    linear-gradient(var(--c) 0 0) bottom left / var(--w) var(--l),
+    linear-gradient(var(--c) 0 0) bottom right / var(--l) var(--w),
+    linear-gradient(var(--c) 0 0) bottom right / var(--w) var(--l);
+  background-repeat: no-repeat;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+  transition: left 90ms linear, top 90ms linear, width 90ms linear, height 90ms linear;
+}
+
+.player-box[data-state="warn"] {
+  --c: var(--red-lit);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--red-lit) 60%, transparent),
+    inset 0 0 30px color-mix(in srgb, var(--red-lit) 22%, transparent);
+}
+
+.player-box[data-state="out"] {
+  --c: var(--red-lit);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--red-lit) 40%, transparent);
+}
+
+/* The stamp: the one word the referee says. */
+.player-box[data-state="out"]::after {
+  content: "OUT";
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  translate: -50% -50%;
+  rotate: -12deg;
+  padding: 0.1em 0.35em 0;
+  border: 3px solid var(--red-lit);
+  border-radius: 6px;
+  color: var(--red-lit);
+  background: rgba(20, 2, 2, 0.35);
+  font-family: var(--font-display);
+  font-size: clamp(0.95rem, 2.2vw, 1.5rem);
+  line-height: 1.1;
+  letter-spacing: 0.04em;
+  animation: stamp 360ms cubic-bezier(0.2, 1.6, 0.4, 1);
+}
+
+@keyframes stamp {
+  from {
+    scale: 1.9;
+    opacity: 0;
+  }
+  to {
+    scale: 1;
+    opacity: 1;
+  }
+}
+
+.player-box[data-broke="true"] {
+  animation: box-break 520ms ease-out;
+}
+
+@keyframes box-break {
+  0% {
+    transform: scale(1);
+  }
+  16% {
+    transform: scale(1.06);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Six pieces, thrown outward on their own rotations. */
+.shard {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  margin: -4.5px 0 0 -4.5px;
+  border-radius: 1px;
+  background: var(--red-lit);
+  opacity: 0;
+  animation: shard-fly 560ms cubic-bezier(0.16, 0.7, 0.3, 1) var(--wait) both;
+}
+
+@keyframes shard-fly {
+  0% {
+    transform: rotate(var(--throw)) translateY(0) scale(1);
+    opacity: 0.95;
+  }
+  100% {
+    transform: rotate(var(--throw)) translateY(-56px) scale(0.28);
+    opacity: 0;
+  }
+}
+
+/* The player's number, worn like a tracksuit patch. */
+.player-tag {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 6px);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.12rem 0.45rem 0.02rem;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #111;
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  line-height: 1.25;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.3);
+}
+
+.player-box[data-state="warn"] .player-tag {
+  background: var(--red-lit);
+  color: #fff;
+}
+
+.player-box[data-state="out"] .player-tag {
+  background: #5d6b6f;
+  color: #e9eeee;
+}
+
+/* Movement meter: the smoothed score against the live cutoff. The tick is the
+   cutoff; the fill crossing it is what a call is made on. */
+.meter {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
   overflow: hidden;
 }
 
-.specstrip div {
-  background: var(--surface);
-  padding: 0.7rem 0.85rem;
+.meter .fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0%;
+  border-radius: 999px;
+  background: #e8f3f3;
+  transition: width 90ms linear, background-color 140ms linear;
 }
 
-.specstrip dt {
-  font-family: var(--font-mono);
-  font-size: 0.66rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--ink-mute);
+.meter[data-over="true"] .fill {
+  background: var(--red-lit);
 }
 
-/* The three readings drift, each on its own period so they never line up
-   into a pulse. It is a page that is breathing, not one that is beating —
-   and the drift is on the value rather than the cell, so the hairline rules
-   between the three stay dead straight. */
-.specstrip dd {
-  margin: 0.2rem 0 0;
-  font-family: var(--font-mono);
-  font-size: 1.02rem;
-  font-weight: 600;
-  animation: chip-float 7.2s ease-in-out infinite;
+.meter .tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  background: var(--yellow);
 }
 
-.specstrip div:nth-child(2) dd {
-  animation-duration: 8.6s;
-  animation-delay: -2.3s;
+.player-box .meter {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 6px);
+  height: 6px;
+  background: rgba(4, 14, 18, 0.6);
 }
 
-.specstrip div:nth-child(3) dd {
-  animation-duration: 9.4s;
-  animation-delay: -4.7s;
+.player-box[data-broke="true"] .fill {
+  transition: width 300ms cubic-bezier(0.5, 0, 0.9, 0.35);
 }
 
-@keyframes chip-float {
-  0%,
+/* ---------------------------------------------------- full-stage moments */
+
+.flash {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  background: var(--red-lit);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.flash[data-on="true"] {
+  animation: flash-out 620ms ease-out;
+}
+
+/* The green-to-red snap is white and over in a third of a second: a camera
+   firing, not a verdict. A different colour and length from the elimination
+   flash is what stops a player reading the light changing as a call. */
+.flash[data-kind="snap"] {
+  background: #ffffff;
+}
+
+.flash[data-kind="snap"][data-on="true"] {
+  animation: flash-snap 300ms ease-out;
+}
+
+@keyframes flash-out {
+  0% {
+    opacity: 0.7;
+  }
   100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-1.5px);
+    opacity: 0;
   }
 }
 
-.hero-doll {
-  margin: 0;
+@keyframes flash-snap {
+  0% {
+    opacity: 0.85;
+  }
+  22% {
+    opacity: 0.3;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.lights-out {
+  position: absolute;
+  inset: -10% -30%;
+  z-index: 6;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateX(100%);
+  background: linear-gradient(98deg, rgba(4, 12, 10, 0) 0%, rgba(4, 12, 10, 0.96) 20%, rgba(4, 12, 10, 0.96) 100%);
+}
+
+.lights-out[data-on="true"] {
+  opacity: 1;
+  animation: lights-out 900ms cubic-bezier(0.36, 0, 0.2, 1) forwards;
+}
+
+@keyframes lights-out {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.fx {
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* A card laid over the stage: the start screen when the camera fails, and the
+   result at the end of a match. */
+.stage-idle,
+.endcard {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  padding: 18px;
+  text-align: center;
+}
+
+.stage-idle {
+  background: rgba(4, 14, 18, 0.78);
+  backdrop-filter: blur(3px);
+}
+
+.idle-title,
+.endcard-title {
+  font-family: var(--font-display);
+  font-weight: 400;
+  line-height: 0.95;
+}
+
+.idle-title {
+  font-size: clamp(1.6rem, 3.4vw, 2.4rem);
+  margin-bottom: 0.6rem;
+}
+
+.idle-text {
+  max-width: 40ch;
+  margin: 0 auto 1.2rem;
+  color: var(--console-ink-2);
+}
+
+.stage-idle .cta-row,
+.endcard .cta-row {
+  justify-content: center;
+}
+
+.endcard {
+  display: none;
+  background: rgba(4, 14, 18, 0.42);
+}
+
+.endcard[data-show="true"] {
+  display: grid;
+  animation: fade-in 380ms ease-out;
+}
+
+.endcard-inner {
   display: grid;
   justify-items: center;
-  gap: 0.8rem;
+  gap: 0.3rem;
+  max-width: 46ch;
+  padding: clamp(18px, 3vw, 28px) clamp(20px, 4vw, 40px);
+  border-radius: 18px;
+  background: rgba(8, 24, 30, 0.92);
+  box-shadow: 0 0 0 2px var(--console-3), 0 30px 60px -30px rgba(0, 0, 0, 0.9);
+}
+
+.endcard[data-show="true"] .endcard-inner {
+  animation: lift 460ms cubic-bezier(0.2, 0.85, 0.3, 1);
+}
+
+.endcard[data-outcome="VICTORY"] .endcard-inner {
+  box-shadow: 0 0 0 2px var(--green-lit), 0 30px 60px -30px rgba(0, 0, 0, 0.9);
+}
+
+.endcard[data-outcome="WIPEOUT"] .endcard-inner {
+  box-shadow: 0 0 0 2px var(--red-lit), 0 30px 60px -30px rgba(0, 0, 0, 0.9);
+}
+
+.endcard[data-outcome="WIPEOUT"] {
+  background: rgba(4, 14, 18, 0.1);
+}
+
+.endcard-eyebrow {
+  font-size: 0.9rem;
+  color: var(--console-ink-2);
+}
+
+.endcard-title {
+  font-size: clamp(2.4rem, 6vw, 4rem);
+}
+
+.endcard[data-outcome="VICTORY"] .endcard-title {
+  color: var(--green-lit);
+}
+
+.endcard[data-outcome="WIPEOUT"] .endcard-title {
+  color: var(--red-on-dark);
+}
+
+.endcard-score {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 1rem;
+  color: var(--console-ink-2);
+}
+
+.endcard-score .num {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  line-height: 1;
+  color: var(--console-ink);
+}
+
+.endcard-detail {
+  font-size: 0.92rem;
+  color: var(--console-ink-2);
+  margin-bottom: 0.8rem;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes lift {
+  from {
+    transform: translateY(14px);
+  }
+}
+
+/* The reason for a call: the player's own movement, and the line it crossed. */
+.why-card {
+  position: absolute;
+  z-index: 7;
+  left: 12px;
+  bottom: 12px;
+  width: min(270px, 64%);
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(8, 22, 27, 0.9);
+  box-shadow: inset 4px 0 0 var(--red-lit), 0 16px 30px -18px rgba(0, 0, 0, 0.9);
+  color: var(--console-ink);
+  display: none;
+}
+
+.why-card[data-show="true"] {
+  display: block;
+  animation: fade-in 200ms ease-out;
+}
+
+.why-card h3 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 1.15rem;
+  line-height: 1.1;
+  color: var(--red-on-dark);
+  margin-bottom: 0.15rem;
+}
+
+.why-card .why-line {
+  font-size: 0.82rem;
+  color: var(--console-ink-2);
+  margin-bottom: 0.35rem;
+}
+
+.why-card svg {
+  display: block;
+  width: 100%;
+  height: 40px;
+  color: var(--console-ink-2);
+}
+
+/* ------------------------------------------------------------ console bar */
+
+.console-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 18px;
+  align-items: center;
+  padding: 2px 4px 2px;
+}
+
+.stage-caption {
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: var(--console-ink-2);
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.difficulty-note,
+.calibration-note {
+  grid-column: 1 / -1;
+  font-size: 0.84rem;
+  color: var(--console-ink-2);
+}
+
+.difficulty-note:empty,
+.calibration-note:empty {
+  display: none;
+}
+
+.segmented {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border-radius: 999px;
+  background: var(--console-2);
+  box-shadow: inset 0 0 0 1px var(--console-rule);
+}
+
+.segmented button {
+  min-height: 38px;
+  padding: 0.4rem 0.85rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--console-ink-2);
+  font-size: 0.86rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.segmented button:hover {
+  color: var(--console-ink);
+}
+
+.segmented button[aria-pressed="true"] {
+  background: var(--console-ink);
+  color: var(--console);
+}
+
+.segmented-light {
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--rule);
+}
+
+.segmented-light button {
+  color: var(--ink-2);
+}
+
+.segmented-light button:hover {
+  color: var(--ink);
+}
+
+.segmented-light button[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--bg);
+}
+
+.icon-btn-dark {
+  width: 42px;
+  height: 42px;
+  background: var(--console-2);
+  border-color: var(--console-rule);
+  color: var(--console-ink);
+}
+
+.icon-btn-dark:hover {
+  background: var(--console-3);
+}
+
+/* Difficulty and sound belong to a match being played; a replay has
+   neither. */
+.console[data-mode="replay"] .controls,
+.console[data-mode="replay"] .difficulty-note {
+  display: none;
+}
+
+.icon-btn-dark .icon-off,
+.icon-btn-dark[aria-pressed="false"] .icon-on {
+  display: none;
+}
+
+.icon-btn-dark[aria-pressed="false"] .icon-off {
+  display: block;
+}
+
+.btn-stop {
+  --edge: rgba(0, 0, 0, 0.5);
+  min-height: 42px;
+  padding: 0.5rem 1rem;
+  background: var(--console-ink);
+  color: var(--console);
+  box-shadow: 0 3px 0 var(--edge);
+}
+
+/* --------------------------------------------------------------- referee */
+
+.referee {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  padding: 12px 6px 6px;
+  min-width: 0;
+}
+
+/* The lamp: the light itself, with the doll standing in front of it. */
+.lamp {
+  position: relative;
+  width: min(100%, 210px);
+  aspect-ratio: 1;
+  margin: 6px auto 34px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 42%, #3c565d 0%, var(--lamp-off) 62%);
+  box-shadow: inset 0 0 0 6px rgba(0, 0, 0, 0.25), 0 0 0 4px var(--console-2);
+  transition: background 140ms linear, box-shadow 140ms linear;
+}
+
+.lamp[data-phase="GREEN"] {
+  background: radial-gradient(circle at 50% 42%, #9ef5c2 0%, var(--green-lit) 46%, #0b6b34 100%);
+  box-shadow: inset 0 0 0 6px rgba(0, 0, 0, 0.18), 0 0 0 4px var(--console-2),
+    0 0 60px -6px var(--green-lit);
+}
+
+.lamp[data-phase="RED"] {
+  background: radial-gradient(circle at 50% 42%, #ffb3a8 0%, var(--red-lit) 46%, #861810 100%);
+  box-shadow: inset 0 0 0 6px rgba(0, 0, 0, 0.18), 0 0 0 4px var(--console-2),
+    0 0 60px -6px var(--red-lit);
+}
+
+.lamp[data-phase="VICTORY"] {
+  background: radial-gradient(circle at 50% 42%, #ffe6a0 0%, var(--yellow) 50%, #a5740a 100%);
 }
 
 .doll-mount {
-  width: min(100%, 320px);
+  position: absolute;
+  left: 50%;
+  bottom: -30px;
+  width: 78%;
+  translate: -50% 0;
   aspect-ratio: 200 / 260;
-  display: block;
+  color: #17110e;
 }
 
 .doll-mount svg {
+  display: block;
   width: 100%;
   height: 100%;
-  display: block;
   overflow: visible;
 }
 
-/* ------------------------------------------------------------- the doll
+.light-state {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  text-align: center;
+}
+
+.light-word {
+  font-family: var(--font-display);
+  font-size: 1.9rem;
+  line-height: 1;
+  color: var(--console-ink);
+}
+
+.light-state[data-phase="GREEN"] .light-word {
+  color: var(--green-lit);
+}
+
+.light-state[data-phase="RED"] .light-word {
+  color: var(--red-on-dark);
+}
+
+.light-sub {
+  font-size: 0.88rem;
+  color: var(--console-ink-2);
+}
+
+/* The arena's timer board: red segments on black. */
+.timer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: #030809;
+  box-shadow: inset 0 0 0 1px var(--console-rule);
+}
+
+.timer-digits svg {
+  display: block;
+  height: 46px;
+  width: auto;
+  overflow: visible;
+}
+
+.seg {
+  fill: var(--led-off);
+  transition: fill 60ms linear;
+}
+
+.seg.on {
+  fill: var(--led-on);
+  filter: drop-shadow(0 0 3px rgba(255, 59, 47, 0.75));
+}
+
+.timer-label {
+  font-size: 0.85rem;
+  line-height: 1.2;
+  color: var(--console-ink-2);
+  max-width: 7rem;
+}
+
+.roster-block {
+  display: grid;
+  gap: 8px;
+}
+
+.roster-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--console-ink-2);
+}
+
+.roster {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-height: 46px;
+}
+
+.roster:empty::before {
+  content: "Players appear here once they stand in frame.";
+  grid-column: 1 / -1;
+  font-size: 0.85rem;
+  color: var(--console-ink-2);
+}
+
+/* One chip per player: their patch, and how much they are moving. */
+.bib {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border-radius: 10px;
+  background: var(--console-2);
+  transition: opacity 200ms ease;
+}
+
+.bib-num {
+  padding: 0.12rem 0.38rem 0;
+  border-radius: 3px;
+  background: #ffffff;
+  color: #111;
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  line-height: 1.25;
+  letter-spacing: 0.03em;
+}
+
+.bib-body {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.bib .meter {
+  height: 6px;
+}
+
+.bib-state {
+  font-size: 0.8rem;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--console-ink-2);
+}
+
+.bib-state:empty {
+  display: none;
+}
+
+/* A recorded match has nine players: three to a row, number and verdict. */
+.roster[data-compact="true"] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.roster[data-compact="true"] .bib {
+  grid-template-columns: auto;
+  justify-content: start;
+  padding: 6px 7px;
+}
+
+/* Nine to a panel leaves no room for the reason; the struck number says
+   who is out, and the status line read to screen readers says why. */
+.roster[data-compact="true"] .bib-body {
+  display: none;
+}
+
+.roster[data-compact="true"] .bib[data-out="true"] .bib-num {
+  background: color-mix(in srgb, var(--red-lit) 45%, #3a2a2a);
+  color: #ffe9e6;
+}
+
+.bib[data-out="true"] .bib-num {
+  background: #4d5c60;
+  color: #cfd8d9;
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
+}
+
+.bib[data-out="true"] .bib-state {
+  color: var(--red-on-dark);
+  font-weight: 600;
+}
+
+.bib[data-out="true"] .meter {
+  display: none;
+}
+
+.bib[data-dropped="true"] {
+  animation: thud 640ms cubic-bezier(0.3, 1.35, 0.4, 1);
+}
+
+@keyframes thud {
+  0% {
+    transform: translateY(-3px);
+  }
+  22% {
+    transform: translateY(5px);
+  }
+  48% {
+    transform: translateY(0);
+  }
+  64% {
+    transform: translateY(2px);
+  }
+}
+
+/* ------------------------------------------------------------------ doll
  *
- * Her whole performance is three transforms on three nested groups, and
- * keeping them on separate elements is the only reason they can run at
- * once. `.doll-head` is the turn — a transition between three fixed angles.
- * `.doll-gaze` inside it is the slow sweep of a red light, and `.eyes`
- * inside that lead the sweep by a fraction. `.doll-body` breathes under all
- * of it. Nothing here loops faster than roughly once every two seconds; a
- * figure a player is trying to hold still in front of must not be busy.
+ * Her whole performance is three transforms on three nested groups, kept on
+ * separate elements so they can run at once. `.doll-head` is the turn, a
+ * transition between fixed angles. `.doll-gaze` inside it is the slow sweep
+ * of a red light, and `.eyes` inside that lead the sweep by a fraction.
+ * `.doll-body` breathes under all of it.
  */
 
 .doll .doll-head,
 .doll .doll-gaze {
   transform-box: fill-box;
-  /* The neck, near enough: the head pivots on the collar, not on its own
-     middle, or the turn reads as a floating ball. */
   transform-origin: 50% 88%;
 }
 
@@ -555,11 +1737,10 @@ section {
 .doll .face,
 .doll .back-head,
 .doll .profile-head {
-  transition: opacity 110ms linear;
   opacity: 0;
+  transition: opacity 110ms linear;
 }
 
-/* Settled, back turned. */
 .doll[data-facing="away"] .doll-head {
   transform: rotate(0deg);
 }
@@ -568,8 +1749,6 @@ section {
   opacity: 1;
 }
 
-/* Settled, watching. The four degrees are a slight cock of the head — she
-   is looking at somebody, not standing to attention. */
 .doll[data-facing="player"] .doll-head {
   transform: rotate(-4deg);
 }
@@ -578,8 +1757,6 @@ section {
   opacity: 1;
 }
 
-/* Mid-turn. The profile out-specifies both settled states, so it wins for
-   exactly as long as the script leaves `data-turn` on. */
 .doll[data-turn="profile"] .back-head,
 .doll[data-turn="profile"] .face {
   opacity: 0;
@@ -593,11 +1770,6 @@ section {
   transform: rotate(-19deg);
 }
 
-/* The body follows the head rather than moving with it: the head is already
-   at the profile before this starts, and it is still catching up after the
-   head has arrived. That lag is the whole difference between a turn and a
-   sprite swap. `[data-facing]` is always present and is here only to lift
-   this above the two idle body animations further down the file. */
 .doll[data-turn][data-facing] .doll-body {
   animation: doll-follow 520ms cubic-bezier(0.33, 0.9, 0.35, 1);
 }
@@ -617,9 +1789,6 @@ section {
   }
 }
 
-/* The red-light sweep: she looks across the arena and back, slowly, once
-   every three and a half seconds. Suspended mid-turn so two animations
-   never claim `.doll-gaze` at the same moment. */
 .doll[data-scan="true"]:not([data-turn]) .doll-gaze {
   animation: doll-scan 3.6s ease-in-out infinite;
 }
@@ -638,16 +1807,14 @@ section {
   }
 }
 
-/* The eyes reach the end of the sweep before the head does, which is what
-   real looking-around does and what makes the head feel driven by it. */
 @keyframes doll-eyes {
   0%,
   100% {
-    transform: translateX(-3.5px);
+    transform: translateX(-3px);
   }
   44%,
   56% {
-    transform: translateX(3.5px);
+    transform: translateX(3px);
   }
 }
 
@@ -656,7 +1823,32 @@ section {
   transform-origin: 50% 50%;
 }
 
-/* One hard look at whoever just moved: out fast, back slowly. */
+/* Armed: her eyes light up red, exactly while the judge is counting. */
+.doll .eye {
+  transition: fill 150ms linear;
+}
+
+.doll[data-armed="true"] .eye {
+  fill: var(--red-lit);
+}
+
+.doll .eye-glow {
+  opacity: 0;
+  fill: var(--red-lit);
+  transition: opacity 150ms linear;
+}
+
+.doll[data-armed="true"] .eye-glow {
+  opacity: 1;
+  animation: eye-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes eye-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
 .doll[data-snap="true"] .doll-head {
   animation: doll-snap 520ms cubic-bezier(0.2, 0.9, 0.3, 1);
 }
@@ -676,38 +1868,15 @@ section {
   }
 }
 
-.doll .scan-ring {
-  opacity: 0;
-  transition: opacity 200ms linear;
-}
-
-.doll[data-armed="true"] .scan-ring {
-  opacity: 1;
-  animation: scan-pulse 1.1s ease-in-out infinite;
-}
-
-@keyframes scan-pulse {
-  0%,
-  100% {
-    opacity: 0.35;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-
 .doll .doll-body {
   transform-box: fill-box;
   transform-origin: 50% 100%;
 }
 
-/* Back turned, chant running: she rocks on her heels. */
 .doll[data-facing="away"] .doll-body {
   animation: doll-sway 2.4s ease-in-out infinite;
 }
 
-/* Facing the arena: she breathes, and that is all. A page that never moves
-   reads as a screenshot; a referee who fidgets reads as unfair. */
 .doll[data-facing="player"] .doll-body {
   animation: doll-breathe 4.2s ease-in-out infinite;
 }
@@ -732,8 +1901,8 @@ section {
   }
 }
 
-/* The bow. Last in the file on purpose: it ties on specificity with both
-   idle body animations and has to win. */
+/* The bow. Last on purpose: it ties on specificity with both idle body
+   animations and has to win. */
 .doll[data-pose="bow"] .doll-body {
   animation: doll-bow 1.5s cubic-bezier(0.3, 0.8, 0.35, 1);
 }
@@ -764,1123 +1933,696 @@ section {
   }
 }
 
-.doll-caption {
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--ink-mute);
-  text-align: center;
+/* ---------------------------------------------------------------- bands */
+
+.band {
+  padding: clamp(64px, 9vw, 112px) 0;
 }
 
-/* --------------------------------------------------------------- arena */
-
-.arena-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 290px;
-  gap: 1.1rem;
-  align-items: start;
+.section-title {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(2.2rem, 4.6vw, 3.5rem);
+  line-height: 1;
+  letter-spacing: -0.005em;
+  margin-bottom: 0.9rem;
+  max-width: 26ch;
 }
 
-.stage {
-  position: relative;
-  aspect-ratio: 4 / 3;
-  width: 100%;
-  background: var(--bg-sunk);
-  border: 3px solid var(--rule-strong);
-  border-radius: var(--radius);
-  /* `clip` rather than `hidden`. `hidden` makes the stage a scroll
-     container, which turns its 4:3 ratio into a fixed height, and on a
-     narrow phone the "Ready when you are" card was cut off. With `clip` the
-     ratio is only the preferred size and the stage grows to fit the card.
-     `hidden` stays first as the fallback for browsers without `clip`. */
-  overflow: hidden;
-  overflow: clip;
+.section-lede {
+  max-width: 60ch;
+  font-size: 1.14rem;
+  color: var(--ink-2);
+  margin-bottom: clamp(28px, 4vw, 44px);
+}
+
+/* ---------------------------------------------------------- how it works */
+
+.steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(18px, 2.6vw, 30px);
+}
+
+.step {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.step p {
+  color: var(--ink-2);
+  max-width: 40ch;
+}
+
+.step-title {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-size: 1.24rem;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.step-num {
+  display: inline-grid;
   place-items: center;
-  isolation: isolate;
+  flex: none;
+  width: 2rem;
+  height: 2rem;
+  padding-top: 0.12rem;
+  border-radius: 50%;
+  background: var(--yellow);
+  color: #231800;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
 }
 
-.stage[data-phase="GREEN"] {
-  border-color: var(--green-lit);
+.step-art {
+  margin: 0 0 6px;
+  aspect-ratio: 16 / 10;
+  border-radius: var(--radius);
+  background: var(--console);
+  overflow: hidden;
+  box-shadow: var(--shadow);
 }
 
-.stage[data-phase="RED"] {
-  border-color: var(--red-lit);
-}
-
-.stage::after {
-  /* The phase wash. Big, soft, and behind everything readable. */
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 3;
-  background: transparent;
-  transition: background-color 200ms linear;
-}
-
-.stage[data-phase="GREEN"]::after {
-  background-color: var(--green-wash);
-}
-
-.stage[data-phase="RED"]::after {
-  background-color: var(--red-wash);
-}
-
-/* The stage lighting, one layer under the wash.
- *
- * Green is a warm lamp hung over the court: the light comes from above, the
- * corners stay open, and the room reads as somewhere you are allowed to
- * walk. Red drops the warmth and closes the corners in. The vignette is the
- * piece doing the work — a frame that narrows is a frame being watched —
- * and it is the same shape a camera puts on footage nobody is meant to
- * enjoy looking at. */
-.stage::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 2;
-  opacity: 0;
-  background: transparent;
-  transition: opacity 240ms ease;
-}
-
-.stage[data-phase="GREEN"]::before {
-  opacity: 1;
-  background:
-    radial-gradient(118% 76% at 50% -14%, rgba(255, 208, 130, 0.3), transparent 62%),
-    radial-gradient(140% 108% at 50% 122%, rgba(23, 163, 74, 0.16), transparent 72%);
-}
-
-.stage[data-phase="RED"]::before {
-  opacity: 1;
-  background:
-    radial-gradient(106% 82% at 50% 46%, transparent 32%, rgba(58, 4, 2, 0.52) 100%),
-    radial-gradient(88% 58% at 50% -12%, rgba(239, 59, 44, 0.24), transparent 60%);
-}
-
-/* Lights out, held. The sweep is the motion; this is the state it leaves
-   behind, and it has to read on a dark theme where the stage was already
-   nearly black — so the corners go to true black and the footage itself is
-   dimmed rather than merely covered. */
-.stage[data-outcome="WIPEOUT"] {
-  border-color: var(--rule-strong);
-}
-
-.stage[data-outcome="WIPEOUT"]::before {
-  opacity: 1;
-  background: radial-gradient(
-    102% 78% at 50% 46%,
-    rgba(0, 0, 0, 0.25) 6%,
-    rgba(0, 0, 0, 0.88) 94%
-  );
-}
-
-.stage[data-outcome="WIPEOUT"] #cam,
-.stage[data-outcome="WIPEOUT"] .overlay,
-.stage[data-outcome="WIPEOUT"] .replay-video {
-  filter: brightness(0.3) saturate(0.15);
-}
-
-/* The freeze at the green-to-red snap: for a quarter of a second the feed
-   stops looking like a live picture and starts looking like evidence. */
-#cam,
-.overlay,
-.replay-video {
-  transition: filter 260ms ease;
-}
-
-.stage[data-freeze="true"] #cam,
-.stage[data-freeze="true"] .replay-video {
-  filter: grayscale(0.85) contrast(1.35) brightness(1.08);
-}
-
-/* The live camera feed only exists once there is a camera behind it. An
-   empty video element paints black, and black under a light theme turns the
-   idle copy into dark text on a dark rectangle. Scoped to `#cam` rather than
-   the more general `.stage video` on purpose: the replay scene also puts a
-   `<video>` in the stage (the recorded match), and a bare descendant
-   selector here would out-specificity `.replay-video` and hide it too,
-   since the replay never sets `data-live="true"`. */
-#cam {
-  display: none;
-  position: absolute;
-  inset: 0;
+.step-art svg {
+  display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  transform: scaleX(-1);
-  z-index: 0;
-  background: #000;
 }
 
-.stage[data-live="true"] #cam {
-  display: block;
+/* Step one: a player, the points a pose model finds, then the box. */
+.art-floor {
+  fill: #13303a;
 }
 
-.stage .overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 4;
-  pointer-events: none;
+.art-shadow {
+  fill: rgba(0, 0, 0, 0.35);
 }
 
-.stage-idle {
-  position: relative;
-  z-index: 5;
-  text-align: center;
-  padding: var(--pad);
-  max-width: 46ch;
+.art-suit,
+.art-arm {
+  fill: var(--teal-bright);
 }
 
-.stage-idle h3 {
-  font-family: var(--font-display);
-  font-weight: 400;
-  font-size: 1.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
+.art-leg {
+  fill: #12665b;
 }
 
-.stage-idle p {
-  margin-inline: auto;
-  color: var(--ink-2);
-  font-size: 0.92rem;
+.art-bib {
+  fill: #ffffff;
 }
 
-/* Per-player box drawn over the mirrored video. */
-.player-box {
-  position: absolute;
-  border: 2px solid var(--ink);
-  border-radius: 6px;
-  transition: left 90ms linear, top 90ms linear, width 90ms linear,
-    height 90ms linear;
+.art-skin {
+  fill: #f1c9a5;
 }
 
-.player-box[data-state="safe"] {
-  border-color: rgba(255, 255, 255, 0.85);
+.art-hair {
+  fill: #1b1512;
 }
 
-.player-box[data-state="warn"] {
-  border-color: var(--red-lit);
-}
-
-.player-box[data-state="out"] {
-  border-color: var(--red-lit);
-  border-style: dashed;
-  opacity: 0.5;
-}
-
-/* The break. The box a player was scored through takes one hit and then
-   stays broken: greyed, slightly collapsed, and dashed — a rectangle the
-   referee has stopped reading. */
-.player-box[data-broke="true"] {
-  animation: box-break 520ms ease-out forwards;
-}
-
-@keyframes box-break {
-  0% {
-    transform: scale(1);
-    filter: none;
-  }
-  16% {
-    transform: scale(1.055);
-  }
-  100% {
-    transform: scale(0.985);
-    filter: grayscale(1) brightness(0.82);
-  }
-}
-
-/* Six pieces, thrown outward on their own rotations. `--throw` is the
-   direction and `--wait` staggers them, so the box comes apart rather than
-   detonating. */
-.shard {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 9px;
-  height: 9px;
-  margin: -4.5px 0 0 -4.5px;
-  border-radius: 1px;
-  background: var(--red-lit);
-  opacity: 0;
-  animation: shard-fly 560ms cubic-bezier(0.16, 0.7, 0.3, 1) var(--wait) both;
-}
-
-@keyframes shard-fly {
-  0% {
-    transform: rotate(var(--throw)) translateY(0) scale(1);
-    opacity: 0.95;
-  }
-  100% {
-    transform: rotate(var(--throw)) translateY(-52px) scale(0.28);
-    opacity: 0;
-  }
-}
-
-/* The meter falls rather than fades: an eliminated player's number does not
-   decay towards zero, it hits it. */
-.player-box[data-broke="true"] .fill,
-.meter-row[data-out="true"] .fill {
-  transition: width 300ms cubic-bezier(0.5, 0, 0.9, 0.35);
-}
-
-.meter-row[data-dropped="true"] {
-  animation: row-thud 640ms cubic-bezier(0.3, 1.35, 0.4, 1);
-}
-
-@keyframes row-thud {
-  0% {
-    transform: translateY(-3px);
-  }
-  22% {
-    transform: translateY(5px);
-  }
-  48% {
-    transform: translateY(0);
-  }
-  64% {
-    transform: translateY(2px);
-  }
-  100% {
-    transform: translateY(0);
-  }
-}
-
-.player-tag {
-  position: absolute;
-  top: -1.55rem;
-  left: -2px;
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.06em;
-  padding: 0.1rem 0.4rem;
-  border-radius: 4px;
-  background: rgba(10, 16, 14, 0.82);
-  color: #fff;
-  white-space: nowrap;
-}
-
-.player-box[data-state="warn"] .player-tag {
-  background: var(--red-lit);
-  color: #fff;
-}
-
-/* Motion meter: the smoothed score against the live threshold. The tick is
-   the threshold; the fill crossing it is what a call is made on. */
-.meter {
-  position: relative;
-  height: 8px;
-  border-radius: 999px;
-  background: var(--surface-2);
-  border: 1px solid var(--rule);
-  overflow: hidden;
-}
-
-.meter .fill {
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 0%;
-  background: var(--ink-2);
-  transition: width 90ms linear, background-color 140ms linear;
-}
-
-.meter[data-over="true"] .fill {
-  background: var(--red-lit);
-}
-
-.meter .tick {
-  position: absolute;
-  top: -2px;
-  bottom: -2px;
-  width: 2px;
-  background: var(--ink);
-  left: 50%;
-}
-
-.meter-row {
-  display: grid;
-  grid-template-columns: 2.7rem minmax(0, 1fr) 4.2rem;
-  gap: 0.55rem;
-  align-items: center;
-  font-family: var(--font-mono);
-  font-size: 0.74rem;
-}
-
-.meter-row .who {
-  font-weight: 600;
-}
-
-.meter-row .val {
-  text-align: right;
-  color: var(--ink-2);
-  font-variant-numeric: tabular-nums;
-}
-
-.meter-row[data-out="true"] {
-  opacity: 0.42;
-  text-decoration: line-through;
-}
-
-.meter-box .meter {
-  position: absolute;
-  left: -2px;
-  right: -2px;
-  bottom: -12px;
-  height: 6px;
-}
-
-/* Phase pill + countdown ring, the two things read at a glance. */
-.phase-pill {
-  display: inline-flex;
-  align-items: baseline;
-  justify-content: center;
-  /* "Green light" alongside "chant running" is wider than the sidebar. The
-     sub drops to its own line rather than the phase itself breaking in
-     half, because a two-line "GREEN LIGHT" is the one thing on this page
-     that must never be misread. */
-  flex-wrap: wrap;
-  gap: 0.1rem 0.6rem;
-  font-family: var(--font-display);
-  font-weight: 400;
-  font-size: 1.6rem;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  padding: 0.3rem 0.9rem 0.22rem;
-  border-radius: 999px;
-  background: var(--surface-2);
-  border: 2px solid var(--rule-strong);
-  color: var(--ink);
-}
-
-.phase-pill[data-phase="GREEN"] {
-  background: var(--green-lit);
-  border-color: var(--green-lit);
-  color: #04120a;
-}
-
-.phase-pill[data-phase="RED"] {
-  background: var(--red-lit);
-  border-color: var(--red-lit);
-  color: #fff;
-  /* A heartbeat, at rest: two quick beats and then most of a second of
-     nothing. Anything faster would be a warning light, and the point of a
-     red light is that it is quiet and you are the one who has to be. */
-  animation: pill-beat 1.7s ease-in-out infinite;
-}
-
-@keyframes pill-beat {
-  0%,
-  40%,
-  100% {
-    transform: scale(1);
-  }
-  8% {
-    transform: scale(1.035);
-  }
-  17% {
-    transform: scale(1);
-  }
-  25% {
-    transform: scale(1.02);
-  }
-}
-
-.phase-pill #phaseWord,
-.phase-pill .sub {
-  white-space: nowrap;
-}
-
-.phase-pill .sub {
-  font-family: var(--font-mono);
-  font-size: 0.66rem;
-  letter-spacing: 0.1em;
+.art-bones path {
+  fill: none;
+  stroke: var(--yellow);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
   opacity: 0.85;
 }
 
-.ring {
-  display: block;
-  width: 100%;
-  max-width: 148px;
-  margin: 0 auto;
+.art-joints circle {
+  fill: var(--yellow);
+  transform-box: fill-box;
+  transform-origin: center;
 }
 
-.ring .track {
+.art-box path {
   fill: none;
-  stroke: var(--rule);
-  stroke-width: 9;
-}
-
-.ring .sweep {
-  fill: none;
-  stroke: var(--accent);
-  stroke-width: 9;
+  stroke: #ffffff;
+  stroke-width: 3.5;
   stroke-linecap: round;
-  transform: rotate(-90deg);
-  transform-origin: 50% 50%;
+  stroke-linejoin: round;
 }
 
-.ring[data-phase="RED"] .sweep {
-  stroke: var(--red-lit);
+.art-tag rect {
+  fill: #ffffff;
 }
 
-.ring[data-phase="GREEN"] .sweep {
-  stroke: var(--green-lit);
-}
-
-.ring text {
+.art-tag text,
+.art-checks text,
+.art-out text {
   font-family: var(--font-display);
-  font-size: 34px;
-  fill: var(--ink);
-  text-anchor: middle;
+  font-size: 15px;
+  fill: #111;
 }
 
-.ring .ring-unit {
-  font-family: var(--font-mono);
-  font-size: 8px;
-  letter-spacing: 1.4px;
-  fill: var(--ink-mute);
+.is-playing .art-joints circle {
+  animation: pop 4.8s cubic-bezier(0.3, 1.6, 0.5, 1) infinite;
+  animation-delay: calc(var(--i) * 70ms);
 }
 
-.sidebar {
-  display: grid;
-  gap: 0.9rem;
-  align-content: start;
+.is-playing .art-bones {
+  animation: appear 4.8s ease infinite;
 }
 
-.sidebar .panel {
-  padding: 0.95rem 1rem;
+.is-playing .art-box path {
+  stroke-dasharray: 60;
+  animation: draw 4.8s ease infinite;
 }
 
-.panel-title {
-  font-family: var(--font-mono);
-  font-size: 0.67rem;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  color: var(--ink-mute);
-  margin: 0 0 0.6rem;
+.is-playing .art-tag {
+  animation: appear-late 4.8s ease infinite;
 }
 
-.roster {
-  display: grid;
-  gap: 0.55rem;
-  margin: 0;
-  min-height: 2rem;
-}
-
-/* An empty panel says nothing. This says what it is waiting for. */
-.roster:empty::before {
-  content: "No players registered yet";
-  font-family: var(--font-mono);
-  font-size: 0.74rem;
-  color: var(--ink-mute);
-}
-
-.segmented {
-  display: flex;
-  gap: 2px;
-  background: var(--rule);
-  border: 1px solid var(--rule);
-  border-radius: 999px;
-  padding: 2px;
-}
-
-.segmented button {
-  flex: 1;
-  border: 0;
-  border-radius: 999px;
-  padding: 0.42rem 0.3rem;
-  font-family: var(--font-mono);
-  font-size: 0.68rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  background: var(--surface);
-  color: var(--ink-2);
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.segmented button[aria-pressed="true"] {
-  background: var(--accent);
-  color: var(--accent-ink);
-  font-weight: 700;
-}
-
-.difficulty-note {
-  margin: 0.6rem 0 0;
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  color: var(--ink-mute);
-}
-
-/* Full-stage moments: the two flashes, the blackout, and the end screens. */
-.flash {
-  position: absolute;
-  inset: 0;
-  z-index: 6;
-  background: var(--red-lit);
-  opacity: 0;
-  pointer-events: none;
-}
-
-.flash[data-on="true"] {
-  animation: flash-out 620ms ease-out;
-}
-
-/* The green-to-red snap is white and over in a third of a second: a camera
-   firing, not a verdict. Keeping it a different colour and a different
-   length from the elimination flash is what stops a player reading the
-   light changing as somebody being called out. */
-.flash[data-kind="snap"] {
-  background: #ffffff;
-}
-
-.flash[data-kind="snap"][data-on="true"] {
-  animation: flash-snap 300ms ease-out;
-}
-
-@keyframes flash-out {
-  0% {
-    opacity: 0.85;
+@keyframes pop {
+  0%,
+  6% {
+    transform: scale(0);
+  }
+  14%,
+  92% {
+    transform: scale(1);
   }
   100% {
-    opacity: 0;
+    transform: scale(0);
   }
 }
 
-@keyframes flash-snap {
-  0% {
-    opacity: 0.92;
-  }
+@keyframes appear {
+  0%,
   22% {
-    opacity: 0.34;
+    opacity: 0;
+  }
+  32%,
+  92% {
+    opacity: 1;
   }
   100% {
     opacity: 0;
   }
 }
 
-/* Lights out: a wipeout takes the room with it. The panel is wider than the
-   stage so its soft leading edge is already off-frame when it starts. */
-.lights-out {
-  position: absolute;
-  inset: -10% -30%;
-  z-index: 6;
-  pointer-events: none;
-  opacity: 0;
-  transform: translateX(100%);
-  background: linear-gradient(
-    98deg,
-    rgba(4, 12, 10, 0) 0%,
-    rgba(4, 12, 10, 0.96) 20%,
-    rgba(4, 12, 10, 0.96) 100%
-  );
-}
-
-/* Opacity is set here rather than animated, so a visitor on reduced motion
-   still gets a dark stage — just immediately. */
-.lights-out[data-on="true"] {
-  opacity: 1;
-  animation: lights-out 900ms cubic-bezier(0.36, 0, 0.2, 1) forwards;
-}
-
-@keyframes lights-out {
-  from {
-    transform: translateX(100%);
+@keyframes draw {
+  0%,
+  34% {
+    stroke-dashoffset: 60;
   }
-  to {
-    transform: translateX(0);
+  48%,
+  92% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: 60;
   }
 }
 
-/* The victory burst is drawn here, above everything including the end card:
-   paper falls in front of what you are reading, or it is not in the room. */
-.fx {
-  position: absolute;
-  inset: 0;
-  z-index: 9;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-}
-
-/* The result is a plate laid on the court, not a wash over it.
- *
- * A scrim heavy enough to make text readable over camera footage also hides
- * whatever the arena is doing underneath — which, on a wipeout, is the
- * lights going out. So the scrim stays light and the card carries its own
- * surface, which reads over anything and lets the stage keep its state. */
-.endcard {
-  position: absolute;
-  inset: 0;
-  z-index: 7;
-  display: none;
-  place-content: center;
-  justify-items: center;
-  text-align: center;
-  padding: var(--pad);
-  background: color-mix(in srgb, var(--bg) 42%, transparent);
-  backdrop-filter: blur(2px);
-}
-
-.endcard[data-show="true"] {
-  display: grid;
-  animation: end-rise 420ms cubic-bezier(0.2, 0.85, 0.3, 1);
-}
-
-@keyframes end-rise {
-  from {
+@keyframes appear-late {
+  0%,
+  46% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  54%,
+  92% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
     opacity: 0;
   }
-  to {
+}
+
+/* Step two: two looks at one player, a tenth of a second apart. */
+.art-window-frame {
+  fill: #0a171c;
+  stroke: rgba(255, 255, 255, 0.18);
+  stroke-width: 1.5;
+}
+
+.art-pixels rect {
+  fill: #20363d;
+}
+
+.art-pixels rect.on {
+  fill: #9cc0c5;
+}
+
+.art-changed rect {
+  fill: var(--pink);
+}
+
+.art-caption {
+  font-size: 11px;
+  fill: #a9c3c7;
+}
+
+.art-arrow {
+  fill: none;
+  stroke: #a9c3c7;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.art-meter-track {
+  fill: rgba(255, 255, 255, 0.14);
+}
+
+.art-meter-fill {
+  fill: var(--red-lit);
+  transform-box: fill-box;
+  transform-origin: left center;
+  transform: scaleX(0.62);
+}
+
+.art-meter-tick {
+  fill: var(--yellow);
+}
+
+.is-playing .art-changed {
+  animation: blink 2.4s steps(1) infinite;
+}
+
+.is-playing .art-meter-fill {
+  animation: meter 2.4s ease-in-out infinite;
+}
+
+@keyframes blink {
+  0%,
+  20% {
+    opacity: 0;
+  }
+  25%,
+  85% {
     opacity: 1;
   }
 }
 
-.endcard-inner {
-  display: grid;
-  justify-items: center;
-  max-width: 42ch;
-  padding: clamp(1rem, 3vw, 1.6rem) clamp(1.2rem, 4vw, 2.4rem)
-    clamp(1.1rem, 3vw, 1.7rem);
-  background: color-mix(in srgb, var(--surface) 95%, transparent);
-  border: 3px solid var(--rule-strong);
-  border-radius: var(--radius);
-  box-shadow: 0 18px 44px -20px rgba(0, 0, 0, 0.55);
-}
-
-/* A wipeout ends with the lights off, so the scrim gets out of the way and
-   lets the dark stage be the background the card is read against. */
-.endcard[data-outcome="WIPEOUT"] {
-  background: color-mix(in srgb, var(--bg) 12%, transparent);
-}
-
-.endcard[data-outcome="VICTORY"] .endcard-inner {
-  border-color: var(--green-lit);
-}
-
-.endcard[data-outcome="WIPEOUT"] .endcard-inner {
-  border-color: var(--red-lit);
-}
-
-.endcard[data-show="true"] .endcard-inner {
-  animation: end-lift 520ms cubic-bezier(0.2, 0.85, 0.3, 1);
-}
-
-@keyframes end-lift {
-  from {
-    transform: translateY(14px);
+@keyframes meter {
+  0%,
+  20% {
+    transform: scaleX(0.04);
   }
-  to {
-    transform: translateY(0);
+  45%,
+  85% {
+    transform: scaleX(0.62);
+  }
+  100% {
+    transform: scaleX(0.04);
   }
 }
 
-.endcard-eyebrow {
-  font-family: var(--font-mono);
-  font-size: 0.68rem;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--ink-mute);
-  margin: 0 0 0.35rem;
+/* Step three: a red light, the grace, the line, and three checks over it. */
+.art-red-zone {
+  fill: rgba(255, 75, 62, 0.14);
 }
 
-.endcard h3 {
-  font-family: var(--font-display);
-  font-weight: 400;
-  font-size: clamp(2.6rem, 9vw, 5.2rem);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  line-height: 0.9;
-  margin: 0;
+.art-grace {
+  fill: rgba(255, 255, 255, 0.07);
 }
 
-.endcard[data-outcome="VICTORY"] h3 {
-  color: var(--green);
+.art-zone-label,
+.art-cutoff-label {
+  font-size: 11px;
+  fill: #a9c3c7;
 }
 
-.endcard[data-outcome="WIPEOUT"] h3 {
-  color: var(--red);
+.art-axis {
+  stroke: rgba(255, 255, 255, 0.25);
+  stroke-width: 1.5;
 }
 
-/* The count is the result; the word above it is only the name for it. */
-.endcard-score {
-  display: flex;
-  align-items: baseline;
-  justify-content: center;
-  gap: 0.5rem;
-  margin: 0.55rem 0 0.7rem;
-  padding: 0.25rem 0.9rem;
-  border-top: 2px solid var(--rule-strong);
-  border-bottom: 2px solid var(--rule-strong);
-  max-width: none;
-}
-
-.endcard-score .num {
-  font-family: var(--font-display);
-  font-weight: 400;
-  font-size: clamp(1.9rem, 5vw, 2.7rem);
-  line-height: 1;
-}
-
-.endcard[data-outcome="VICTORY"] .endcard-score .num {
-  color: var(--green);
-}
-
-.endcard[data-outcome="WIPEOUT"] .endcard-score .num {
-  color: var(--red);
-}
-
-.endcard-score .of {
-  font-family: var(--font-mono);
-  font-size: 0.68rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--ink-mute);
-}
-
-.endcard p {
-  margin-inline: auto;
-  color: var(--ink-2);
-}
-
-.endcard-detail {
-  font-size: 0.9rem;
-  margin-bottom: 0.4rem;
-}
-
-.endcard .btn-play {
-  font-size: 1.8rem;
-  padding: 0.6rem 2.1rem 0.55rem;
-}
-
-/* The "why": the eliminated player's own trace, at the moment of the call. */
-.why-card {
-  position: absolute;
-  z-index: 8;
-  right: 0.7rem;
-  bottom: 0.7rem;
-  width: min(260px, 62%);
-  background: var(--surface);
-  border: 2px solid var(--red-lit);
-  border-radius: var(--radius-sm);
-  padding: 0.6rem 0.7rem;
-  box-shadow: var(--shadow);
-  display: none;
-}
-
-.why-card[data-show="true"] {
-  display: block;
-}
-
-.why-card h4 {
-  margin: 0 0 0.15rem;
-  font-family: var(--font-display);
-  font-weight: 400;
-  font-size: 1.05rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--red);
-}
-
-.why-card .why-line {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  color: var(--ink-2);
-  margin: 0 0 0.35rem;
-}
-
-.why-card svg {
-  display: block;
-  width: 100%;
-  height: 44px;
-}
-
-/* The replay: the recorded match, with no camera anywhere near it.
-   Two views share this scene — a real annotated video and the older
-   animated data view — switched by `.replay-tabs` without either one
-   leaving the DOM, so flipping between them is instant. */
-.replay-scene {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  padding: clamp(1rem, 4vw, 2.4rem);
-  pointer-events: none;
-}
-
-.replay-tabs {
-  display: flex;
-  justify-content: center;
-  gap: 0.5rem;
-  margin-bottom: 0.8rem;
-  pointer-events: auto;
-}
-
-.replay-tab {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  padding: 0.35rem 0.85rem;
-  border-radius: 999px;
-  border: 1px solid var(--rule-strong);
-  background: color-mix(in srgb, var(--surface) 88%, transparent);
-  color: var(--ink-2);
-  cursor: pointer;
-}
-
-.replay-tab[aria-pressed="true"] {
-  background: var(--ink);
-  color: var(--bg);
-  border-color: var(--ink);
-}
-
-.replay-view {
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
-  min-height: 0;
-}
-
-.replay-view[hidden] {
-  display: none;
-}
-
-.replay-video {
-  display: block;
-  align-self: center;
-  justify-self: center;
-  width: 100%;
-  max-height: 100%;
-  /* The recorded footage is 768x576. Pinning the ratio keeps the frame a
-     real height before the video's own metadata has loaded — without it
-     the `minmax(0, 1fr)` row above collapses to nothing and the poster
-     never gets anywhere to paint, on a slow connection or in a headless
-     screenshot taken before `loadedmetadata` fires. */
-  aspect-ratio: 4 / 3;
-  border-radius: var(--radius-sm);
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.28);
-  background: #000;
-  pointer-events: auto;
-}
-
-.replay-field {
-  align-self: center;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  gap: clamp(0.5rem, 2.4vw, 1.3rem);
-  flex-wrap: wrap;
-  border-bottom: 4px dashed var(--rule-strong);
-  padding-bottom: 1rem;
-}
-
-.replay-token {
-  position: relative;
-  width: clamp(30px, 6vw, 46px);
-  display: grid;
-  justify-items: center;
-  gap: 0.3rem;
-}
-
-.replay-token .tk-body {
-  width: 100%;
-  aspect-ratio: 2 / 3;
-  border-radius: 44% 44% 18% 18%;
-  background: var(--ink-2);
-  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.18);
-  transition: transform 320ms ease, background-color 320ms ease;
-}
-
-.replay-token .tk-id {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  color: var(--ink-2);
-}
-
-.replay-token .tk-why {
-  font-family: var(--font-mono);
-  font-size: 0.58rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--red);
-  min-height: 0.8em;
-}
-
-.replay-field[data-phase="GREEN"] .replay-token:not([data-out="true"]) .tk-body {
-  animation: replay-step 620ms ease-in-out infinite alternate;
-}
-
-.replay-field[data-phase="GREEN"] .replay-token:nth-child(2n) .tk-body {
-  animation-delay: 150ms;
-}
-
-.replay-field[data-phase="GREEN"] .replay-token:nth-child(3n) .tk-body {
-  animation-delay: 310ms;
-}
-
-@keyframes replay-step {
-  from {
-    transform: translateY(0);
-  }
-  to {
-    transform: translateY(-10px);
-  }
-}
-
-/* Only the body falls over. The label stays upright, because a number
-   printed sideways is a number nobody reads. */
-.replay-token[data-out="true"] .tk-body {
-  transform: rotate(80deg) translate(6px, 4px);
-  background: var(--red-lit);
-  opacity: 0.55;
-}
-
-.replay-token[data-out="true"] .tk-id {
-  color: var(--ink-mute);
-}
-
-.replay-note {
-  margin: 0.9rem 0 0;
-  max-width: none;
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  line-height: 1.5;
-  color: var(--ink-2);
-  background: color-mix(in srgb, var(--surface) 86%, transparent);
-  border-radius: var(--radius-sm);
-  padding: 0.55rem 0.75rem;
-}
-
-/* Difficulty and sound sit under the stage rather than in the sidebar: they
-   are things you reach for while looking at the video, and the sidebar's job
-   is to be read from across the room. */
-.stage-controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.7rem 1rem;
-  margin: 0.9rem 0 0;
-}
-
-.stage-controls .segmented {
-  flex: 0 1 auto;
-}
-
-/* The live threshold reading gets its own line rather than being squeezed
-   between the controls and the edge. */
-.stage-controls .difficulty-note {
-  flex: 1 1 100%;
-  margin: 0;
-}
-
-.privacy {
-  display: block;
-  margin: 0.9rem 0 0;
-  padding: 0.75rem 0.9rem;
-  border: 2px dashed var(--rule-strong);
-  border-radius: var(--radius-sm);
-  font-size: 0.86rem;
-  line-height: 1.55;
-  color: var(--ink-2);
-  max-width: none;
-}
-
-.privacy strong {
-  color: var(--ink);
-}
-
-/* ------------------------------------------------------------- pipeline */
-
-.pipeline-figure {
-  width: 100%;
-  overflow-x: auto;
-}
-
-.pipeline-figure svg {
-  display: block;
-  min-width: 720px;
-  width: 100%;
-  height: auto;
-}
-
-.pipe-box {
-  fill: var(--surface);
-  stroke: var(--rule-strong);
+.art-cutoff {
+  stroke: var(--yellow);
   stroke-width: 2;
+  stroke-dasharray: 6 5;
 }
 
-.pipe-label {
-  font-family: var(--font-body);
-  font-size: 13px;
-  font-weight: 650;
-  fill: var(--ink);
-}
-
-.pipe-sub {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  fill: var(--ink-mute);
-}
-
-.pipe-arrow {
-  stroke: var(--rule-strong);
-  stroke-width: 2;
+.art-trace {
   fill: none;
-  marker-end: url(#pipe-head);
+  stroke: #e9f4f4;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
-.pipe-verdict-red {
+.art-checks circle {
   fill: var(--red-lit);
 }
 
-.pipe-verdict-green {
-  fill: var(--green-lit);
+.art-checks text {
+  font-size: 12px;
+  fill: #fff;
 }
 
-.claim {
+.art-checks g {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.art-out rect {
+  fill: none;
+  stroke: var(--red-lit);
+  stroke-width: 3;
+}
+
+.art-out text {
+  font-size: 22px;
+  fill: var(--red-lit);
+}
+
+.art-out {
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: rotate(-8deg);
+}
+
+.is-playing .art-trace {
+  stroke-dasharray: 320;
+  animation: trace 4.8s linear infinite;
+}
+
+.is-playing .art-checks g {
+  animation: check 4.8s cubic-bezier(0.3, 1.6, 0.5, 1) infinite;
+  animation-delay: calc(var(--i) * 260ms);
+}
+
+.is-playing .art-out {
+  animation: slam 4.8s cubic-bezier(0.2, 1.4, 0.4, 1) infinite;
+}
+
+@keyframes trace {
+  0% {
+    stroke-dashoffset: 320;
+  }
+  50%,
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes check {
+  0%,
+  36% {
+    transform: scale(0);
+  }
+  42%,
+  94% {
+    transform: scale(1);
+  }
+  100% {
+    transform: scale(0);
+  }
+}
+
+@keyframes slam {
+  0%,
+  58% {
+    opacity: 0;
+    transform: rotate(-8deg) scale(1.8);
+  }
+  64%,
+  94% {
+    opacity: 1;
+    transform: rotate(-8deg) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(-8deg) scale(1);
+  }
+}
+
+.privacy-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  margin-top: clamp(28px, 4vw, 44px);
+  max-width: 62ch;
+  padding: 14px 18px;
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--rule);
+  color: var(--ink-2);
+  font-size: 0.97rem;
+}
+
+.privacy-note .icon {
+  margin-top: 0.15rem;
+  color: var(--ink);
+}
+
+/* -------------------------------------------------------------- accuracy */
+
+.band-accuracy {
+  background: var(--surface-2);
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+}
+
+.proof {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
+  gap: clamp(18px, 2.6vw, 28px);
+}
+
+.proof-main {
+  padding: clamp(20px, 3vw, 32px);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--rule), var(--shadow);
+}
+
+.tallies {
+  display: grid;
+  gap: clamp(26px, 3.4vw, 40px);
+}
+
+.tally-fig {
+  margin: 0;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  gap: 0.9rem;
-  align-items: start;
-  padding: 0.9rem 1rem;
-  border-left: 4px solid var(--accent);
-  background: var(--surface-2);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  gap: 12px 20px;
+  align-items: end;
 }
 
-.claim .stamp {
-  font-family: var(--font-mono);
-  font-size: 0.65rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--accent);
-  padding-top: 0.15rem;
+.tally-fig .dots,
+.tally-fig .dots-key {
+  grid-column: 1 / -1;
 }
 
-.claim p {
-  margin: 0;
+.tally-num {
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 2.6vw, 2rem);
+  line-height: 1;
+  color: var(--ink-2);
+}
+
+.tally-num strong {
+  font-weight: 400;
+  font-size: clamp(2.6rem, 5vw, 3.8rem);
+  color: var(--ink);
+}
+
+.tally-cap {
+  max-width: 32ch;
+  margin-bottom: 4px;
+  font-size: 1rem;
+  line-height: 1.4;
+  color: var(--ink-2);
+}
+
+/* Every sample is one square: a unit chart, so the misses are countable. */
+.dots {
+  width: 100%;
+  min-height: 60px;
+}
+
+.dots canvas {
+  display: block;
+}
+
+.dots-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-top: -4px;
+  font-size: 0.88rem;
+  color: var(--ink-2);
+}
+
+.dots-key i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  border-radius: 2px;
+  vertical-align: -1px;
+}
+
+.proof-note {
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--rule);
+  font-size: 0.95rem;
+  color: var(--ink-2);
+  max-width: 70ch;
+}
+
+.proof-side {
+  display: grid;
+  align-content: start;
+  gap: clamp(18px, 2.6vw, 28px);
+}
+
+.proof-more {
+  display: grid;
+  justify-items: start;
+  gap: 14px;
+  padding: clamp(20px, 3vw, 30px);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--rule), var(--shadow);
+}
+
+.proof-more p {
+  color: var(--ink-2);
+}
+
+.parity {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: clamp(20px, 3vw, 30px);
+  border-radius: var(--radius);
+  background: var(--console);
+  color: var(--console-ink);
+  box-shadow: var(--shadow);
+}
+
+.parity h3 {
+  font-size: 1.24rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.parity p {
+  color: var(--console-ink-2);
+}
+
+.parity .text-link {
+  color: #ff86b3;
+}
+
+/* ---------------------------------------------------------- measurements */
+
+.band-top {
+  padding-top: 112px;
+  padding-bottom: 8px;
+}
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 18px;
+  font-weight: 600;
+  color: var(--ink-2);
+  text-decoration: none;
+}
+
+.back-link:hover {
+  color: var(--ink);
+}
+
+.page-title {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(3rem, 7vw, 5.4rem);
+  line-height: 0.95;
+  margin-bottom: 1rem;
+}
+
+.toc {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.toc a {
+  padding: 0.45rem 0.95rem;
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--rule-strong);
+  color: var(--ink);
   font-size: 0.92rem;
+  font-weight: 600;
+  text-decoration: none;
 }
 
-/* ----------------------------------------------------------------- lab */
+.toc a:hover {
+  background: var(--surface-2);
+}
 
+#measurements .band + .band {
+  border-top: 1px solid var(--rule);
+}
+
+.card {
+  padding: clamp(18px, 2.6vw, 26px);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--rule), var(--shadow);
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.card h3 {
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.card-label {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.note {
+  font-size: 0.92rem;
+  color: var(--ink-2);
+}
+
+.wide-note {
+  margin-top: 18px;
+  max-width: 78ch;
+}
+
+/* The referee lab. */
 .lab-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 268px;
-  gap: 1.1rem;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 18px;
   align-items: start;
+}
+
+.lab-side {
+  display: grid;
+  gap: 14px;
 }
 
 .plot-frame {
   position: relative;
-  background: var(--surface);
-  border: 1px solid var(--rule);
+  padding: 14px 16px 8px;
   border-radius: var(--radius);
-  padding: 0.9rem 1rem 0.6rem;
-  box-shadow: var(--shadow);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--rule), var(--shadow);
   touch-action: none;
 }
 
@@ -1897,8 +2639,8 @@ section {
 }
 
 .plot-frame .axis-text {
-  font-family: var(--font-mono);
-  font-size: 9px;
+  font-family: var(--font-body);
+  font-size: 10px;
   fill: var(--ink-mute);
 }
 
@@ -1914,10 +2656,6 @@ section {
   stroke-linecap: round;
 }
 
-/* The frozen traces are all exactly zero and lie on top of each other on the
-   baseline. Drawn at the same weight as the moving ones they read as an axis
-   rather than as data, so they get more ink and the plot floor sits below
-   zero to lift them clear of the frame. */
 .plot-frame .trace-frozen {
   fill: none;
   stroke: var(--s3);
@@ -1926,7 +2664,6 @@ section {
   stroke-linecap: round;
 }
 
-/* Hovering a verdict lifts that player's trace out of the tangle. */
 .plot-frame[data-focus] polyline {
   opacity: 0.16;
 }
@@ -1934,16 +2671,6 @@ section {
 .plot-frame[data-focus] polyline.is-focused {
   opacity: 1;
   stroke-width: 4;
-}
-
-.tally-row {
-  cursor: default;
-  border-radius: 4px;
-  padding: 0.1rem 0.2rem;
-}
-
-.tally-row:hover {
-  background: var(--surface-2);
 }
 
 .plot-frame .caught-dot {
@@ -1963,9 +2690,9 @@ section {
 }
 
 .plot-frame .thresh-grip-text {
-  font-family: var(--font-mono);
+  font-family: var(--font-body);
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 600;
   fill: var(--accent-ink);
 }
 
@@ -1975,10 +2702,23 @@ section {
   stroke-dasharray: 2 3;
 }
 
-/* Every cutoff inside this band gives the identical eight verdicts. */
 .plot-frame .safe-band {
   fill: var(--accent);
   opacity: 0.1;
+}
+
+.big-read {
+  font-family: var(--font-display);
+  font-size: 1.9rem;
+  line-height: 1.1;
+}
+
+.big-read small {
+  display: block;
+  font-family: var(--font-body);
+  font-size: 0.84rem;
+  color: var(--ink-2);
+  margin-top: 0.15rem;
 }
 
 .big-read .split-read {
@@ -1986,26 +2726,36 @@ section {
   margin-top: 0.5rem;
 }
 
+input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
 .tally {
   display: grid;
-  gap: 0.5rem;
-  margin: 0;
+  gap: 6px;
 }
 
 .tally-row {
   display: grid;
-  grid-template-columns: 0.7rem minmax(0, 1fr) auto;
-  gap: 0.55rem;
+  grid-template-columns: 0.75rem minmax(0, 1fr) auto;
+  gap: 0.6rem;
   align-items: center;
-  font-family: var(--font-mono);
-  font-size: 0.76rem;
+  font-size: 0.9rem;
+  padding: 0.15rem 0.3rem;
+  border-radius: 6px;
+  cursor: default;
+}
+
+.tally-row:hover {
+  background: var(--surface-2);
 }
 
 .swatch {
-  width: 0.7rem;
-  height: 0.7rem;
-  border-radius: 3px;
   display: inline-block;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 3px;
 }
 
 .swatch-moving {
@@ -2017,156 +2767,104 @@ section {
 }
 
 .verdict-out {
-  color: var(--red);
-  font-weight: 700;
+  color: var(--red-text);
+  font-weight: 600;
 }
 
 .verdict-safe {
   color: var(--ink-2);
 }
 
-.big-read {
-  font-family: var(--font-mono);
-  font-size: 1.9rem;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  line-height: 1.1;
+/* The obvious designs. */
+.control-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
 }
 
-.big-read small {
-  display: block;
-  font-size: 0.66rem;
-  font-weight: 400;
-  letter-spacing: 0.13em;
-  text-transform: uppercase;
-  color: var(--ink-mute);
-  margin-top: 0.2rem;
+.control-label {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--ink-2);
 }
-
-input[type="range"] {
-  width: 100%;
-  accent-color: var(--accent);
-}
-
-/* --------------------------------------------------------------- naive */
 
 .exhibits {
   display: grid;
-  gap: 1.1rem;
+  gap: 16px;
 }
 
 .exhibit {
   display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
-  gap: clamp(1rem, 3vw, 2rem);
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: clamp(18px, 3vw, 36px);
   align-items: center;
-  background: var(--surface);
-  border: 1px solid var(--rule);
+  padding: clamp(18px, 2.6vw, 28px);
   border-radius: var(--radius);
-  padding: var(--pad);
-  box-shadow: var(--shadow);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--rule), var(--shadow);
 }
 
 .exhibit h3 {
   font-family: var(--font-display);
   font-weight: 400;
-  font-size: 1.5rem;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  margin-bottom: 0.35rem;
+  font-size: 1.6rem;
+  line-height: 1.1;
+  margin-bottom: 0.5rem;
 }
 
 .exhibit p {
-  font-size: 0.93rem;
+  color: var(--ink-2);
+  font-size: 0.98rem;
 }
 
-.exhibit p:last-child {
-  margin-bottom: 0;
+.exhibit p + p {
+  margin-top: 0.6rem;
 }
 
 .readout-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1px;
-  background: var(--rule);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
+  gap: 10px;
 }
 
 .readout {
+  padding: 12px 14px;
+  border-radius: 12px;
   background: var(--surface-2);
-  padding: 0.7rem 0.8rem;
+  box-shadow: inset 0 0 0 1px var(--rule);
+}
+
+.readout-wide {
+  grid-column: 1 / -1;
 }
 
 .readout .k {
-  font-family: var(--font-mono);
-  font-size: 0.64rem;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
-  color: var(--ink-mute);
   display: block;
+  font-size: 0.82rem;
+  color: var(--ink-2);
 }
 
 .readout .v {
-  font-family: var(--font-mono);
-  font-size: 1.25rem;
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  line-height: 1.2;
   font-variant-numeric: tabular-nums;
 }
 
 .readout[data-flavour="bad"] .v {
-  color: var(--red);
+  color: var(--red-text);
 }
 
 .readout[data-flavour="good"] .v {
-  color: var(--green);
-}
-
-.control-row {
-  display: flex;
-  align-items: center;
-  gap: 0.8rem;
-  flex-wrap: wrap;
-  margin: 0 0 0.9rem;
-}
-
-.control-row label {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
-  color: var(--ink-mute);
-}
-
-.limitation {
-  border: 2px solid var(--red);
-  border-radius: var(--radius-sm);
-  padding: 0.85rem 1rem;
-  background: var(--red-wash);
-  margin-top: 1rem;
-}
-
-.limitation .tagline {
-  font-family: var(--font-mono);
-  font-size: 0.65rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--red);
-  display: block;
-  margin-bottom: 0.35rem;
-}
-
-.limitation p {
-  margin: 0;
-  font-size: 0.9rem;
-  max-width: none;
+  color: var(--green-text);
 }
 
 .barline {
   display: grid;
-  gap: 0.4rem;
-  margin: 0.9rem 0 0;
+  gap: 6px;
+  margin-top: 14px;
 }
 
 .barline-row {
@@ -2174,21 +2872,19 @@ input[type="range"] {
   grid-template-columns: 8.5rem minmax(0, 1fr) 3.4rem;
   gap: 0.6rem;
   align-items: center;
-  font-family: var(--font-mono);
-  font-size: 0.73rem;
+  font-size: 0.85rem;
 }
 
 .barline-track {
   height: 14px;
+  border-radius: 4px;
   background: var(--surface-2);
-  border: 1px solid var(--rule);
-  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px var(--rule);
   overflow: hidden;
 }
 
 .barline-fill {
   height: 100%;
-  border-radius: 0 3px 3px 0;
   background: var(--s1);
   transition: width 200ms ease;
 }
@@ -2206,32 +2902,51 @@ input[type="range"] {
   font-variant-numeric: tabular-nums;
 }
 
-/* ------------------------------------------------------------- results */
+.limitation {
+  margin-top: 16px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--red-lit) 8%, var(--surface));
+  box-shadow: inset 4px 0 0 var(--red-lit);
+}
 
+.limitation-title {
+  font-weight: 600;
+  margin-bottom: 0.3rem;
+}
+
+.limitation p:last-child {
+  color: var(--ink-2);
+  font-size: 0.95rem;
+}
+
+/* The benchmark charts. */
 .chart-grid {
   display: grid;
-  /* `min(420px, 100%)`, not a bare 420px: on a phone narrower than one
-     column the track would otherwise stay 420px wide and push the page
-     sideways. */
   grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr));
-  gap: 1.1rem;
+  gap: 16px;
 }
 
 .chart-card {
-  background: var(--surface);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius);
-  padding: var(--pad);
-  box-shadow: var(--shadow);
   min-width: 0;
+  padding: clamp(18px, 2.6vw, 26px);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--rule), var(--shadow);
+}
+
+.chart-card-wide {
+  margin-top: 16px;
 }
 
 .chart-card h3 {
-  margin-bottom: 0.15rem;
+  font-size: 1.12rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
 }
 
 .chart-card .note {
-  margin-bottom: 0.9rem;
+  margin-bottom: 14px;
 }
 
 .chart-frame {
@@ -2243,16 +2958,14 @@ input[type="range"] {
   height: 320px;
 }
 
-/* Two bars need two bars' worth of height, not a chart's worth. */
 .chart-frame.short {
   height: 150px;
 }
 
 .chart-missing {
   display: none;
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
-  color: var(--ink-mute);
+  font-size: 0.88rem;
+  color: var(--ink-2);
   border: 1px dashed var(--rule-strong);
   border-radius: var(--radius-sm);
   padding: 0.8rem;
@@ -2266,60 +2979,53 @@ input[type="range"] {
   display: block;
 }
 
-/* Legends live in HTML, not on the canvas: page type, and they wrap. */
 .legend-row {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem 1rem;
-  margin: 0.7rem 0 0;
-  max-width: none;
+  margin-top: 0.8rem;
 }
 
 .legend-key {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
+  font-size: 0.85rem;
   color: var(--ink-2);
 }
 
 .legend-key i {
-  width: 0.7rem;
-  height: 0.7rem;
-  border-radius: 3px;
   display: inline-block;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 3px;
 }
 
 details.table-view {
-  margin-top: 0.9rem;
-  border-top: 1px solid var(--rule);
+  margin-top: 1rem;
   padding-top: 0.6rem;
-  /* The widest table scrolls inside its card on the narrowest phones. */
+  border-top: 1px solid var(--rule);
   overflow-x: auto;
 }
 
 details.table-view summary {
   cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--ink-mute);
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--ink-2);
 }
 
 table {
   width: 100%;
-  border-collapse: collapse;
   margin-top: 0.7rem;
-  font-family: var(--font-mono);
-  font-size: 0.76rem;
+  border-collapse: collapse;
+  font-size: 0.86rem;
 }
 
 th,
 td {
+  padding: 0.4rem 0.5rem;
   text-align: right;
-  padding: 0.35rem 0.5rem;
   border-bottom: 1px solid var(--rule);
   font-variant-numeric: tabular-nums;
 }
@@ -2330,142 +3036,312 @@ td:first-child {
 }
 
 thead th {
-  color: var(--ink-mute);
-  font-weight: 500;
-  font-size: 0.66rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--ink-2);
 }
 
 .stat-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 1px;
-  background: var(--rule);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
+  gap: 10px;
   margin: 0;
 }
 
 .stat {
-  background: var(--surface);
-  padding: 0.85rem 0.95rem;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--rule);
 }
 
 .stat .k {
-  font-family: var(--font-mono);
-  font-size: 0.64rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--ink-mute);
   display: block;
+  font-size: 0.82rem;
+  color: var(--ink-2);
+}
+
+.stat .k,
+.stat .v {
+  margin: 0;
 }
 
 .stat .v {
-  font-family: var(--font-mono);
-  font-size: 1.5rem;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
+  font-family: var(--font-display);
+  font-size: 1.6rem;
   line-height: 1.2;
+  font-variant-numeric: tabular-nums;
 }
 
-/* -------------------------------------------------------------- engine */
+#benchMeta {
+  margin-top: 14px;
+}
+
+/* Running it yourself. */
+.split {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+  gap: 16px;
+  align-items: stretch;
+}
 
 pre {
   margin: 0;
   overflow-x: auto;
-  background: var(--surface-2);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-sm);
-  padding: 0.9rem 1rem;
-  font-family: var(--font-mono);
-  font-size: 0.82rem;
+  padding: 16px 18px;
+  border-radius: 12px;
+  background: var(--console);
+  color: var(--console-ink);
+  font-family: var(--font-code);
+  font-size: 0.84rem;
   line-height: 1.7;
 }
 
 pre code {
-  background: none;
-  border: 0;
-  padding: 0;
   font-size: inherit;
 }
 
-.split {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 1.1rem;
-  align-items: stretch;
-}
+/* ---------------------------------------------------------------- footer */
 
 footer {
-  margin-top: clamp(3rem, 7vw, 5rem);
-  border-top: 3px solid var(--rule-strong);
-  padding: 1.2rem 0 2.5rem;
-  color: var(--ink-mute);
-  font-size: 0.86rem;
+  padding: 36px 0 48px;
+  border-top: 1px solid var(--rule);
+  color: var(--ink-2);
+  font-size: 0.92rem;
+}
+
+.footer-inner {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem 1.2rem;
+  gap: 6px 22px;
   align-items: baseline;
 }
 
-footer p {
-  margin: 0;
+.footer-fine {
+  flex-basis: 100%;
+  font-size: 0.84rem;
+  color: var(--ink-mute);
 }
 
-.visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  clip-path: inset(50%);
-  white-space: nowrap;
+/* The selftest's verdict, for a person rather than a headless browser. */
+.selftest-banner {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  z-index: 60;
+  translate: -50% 0;
+  width: max-content;
+  max-width: calc(100% - 32px);
+  padding: 12px 18px;
+  border-radius: 14px;
+  background: var(--console);
+  color: var(--console-ink);
+  box-shadow: inset 4px 0 0 var(--green-lit), 0 20px 40px -20px rgba(0, 0, 0, 0.7);
+  font-size: 0.95rem;
 }
 
-/* ---------------------------------------------------------- responsive */
+.selftest-banner[data-passed="false"] {
+  box-shadow: inset 4px 0 0 var(--red-lit), 0 20px 40px -20px rgba(0, 0, 0, 0.7);
+}
 
-@media (max-width: 940px) {
-  .masthead {
+/* ------------------------------------------------------------ responsive */
+
+@media (max-width: 1080px) {
+  .console {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .hero-doll {
-    order: -1;
+  .referee {
+    grid-template-columns: 170px minmax(0, 1fr);
+    grid-template-areas:
+      "lamp light"
+      "lamp timer"
+      "roster roster";
+    align-items: center;
+    column-gap: 18px;
+    padding: 6px 4px 4px;
+  }
+
+  .lamp {
+    grid-area: lamp;
+    width: 150px;
+    margin: 4px auto 30px;
+  }
+
+  .light-state {
+    grid-area: light;
     justify-items: start;
+    text-align: left;
   }
 
-  .doll-mount {
-    width: min(58%, 220px);
+  .timer {
+    grid-area: timer;
+    justify-content: flex-start;
+    justify-self: start;
   }
 
-  .arena-grid,
-  .lab-grid {
+  .roster-block {
+    grid-area: roster;
+  }
+
+  .roster {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  }
+}
+
+@media (max-width: 860px) {
+  .hero-head {
     grid-template-columns: minmax(0, 1fr);
+    align-items: start;
   }
 
+  .steps {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 560px;
+  }
+
+  .proof,
+  .lab-grid,
   .exhibit {
     grid-template-columns: minmax(0, 1fr);
   }
+
+  .nav a:not(.nav-source):not([data-route="measurements"]) {
+    display: none;
+  }
 }
 
-@media (max-width: 560px) {
-  .specstrip {
+@media (max-width: 620px) {
+  body {
+    font-size: 1rem;
+  }
+
+  .hero {
+    padding-top: 88px;
+  }
+
+  .brand-name,
+  .nav-source span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .cloud {
+    display: none;
+  }
+
+  .sign {
+    font-size: clamp(2.7rem, 15vw, 4.2rem);
+  }
+
+  .cta-row .btn {
+    flex: 1 1 100%;
+  }
+
+  .console {
+    margin-inline: calc(-1 * var(--gutter) + 6px);
+    padding: 8px;
+    border-radius: 18px;
+  }
+
+  .console-bar {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .meter-row {
-    grid-template-columns: 2.4rem minmax(0, 1fr) 3.8rem;
+  .controls {
+    flex-wrap: wrap;
+  }
+
+  .referee {
+    grid-template-columns: 116px minmax(0, 1fr);
+    column-gap: 12px;
+  }
+
+  .lamp {
+    width: 110px;
+    margin-bottom: 24px;
+  }
+
+  .light-word {
+    font-size: 1.5rem;
+  }
+
+  .timer {
+    padding: 8px 10px;
+    gap: 8px;
+  }
+
+  .timer-digits svg {
+    height: 34px;
+  }
+
+  .why-card {
+    width: calc(100% - 24px);
+  }
+
+  /* A phone's stage is a few hundred pixels tall: the result keeps its
+     count and its two ways on, and drops the sentences around them. */
+  .endcard {
+    padding: 8px;
+  }
+
+  .endcard-inner {
+    gap: 0.15rem;
+    padding: 12px 14px;
+  }
+
+  .endcard-eyebrow,
+  .endcard-detail {
+    display: none;
+  }
+
+  .endcard-title {
+    font-size: 2.1rem;
+  }
+
+  .idle-title {
+    font-size: 1.35rem;
+    margin-bottom: 0.4rem;
+  }
+
+  .idle-text {
+    font-size: 0.85rem;
+    line-height: 1.45;
+    margin-bottom: 0.7rem;
+  }
+
+  .endcard-score {
+    margin-bottom: 0.5rem;
+  }
+
+  .endcard .cta-row,
+  .stage-idle .cta-row {
+    gap: 8px;
+  }
+
+  .endcard .cta-row .btn,
+  .stage-idle .cta-row .btn {
+    flex: 0 1 auto;
+    min-height: 40px;
+    padding: 0.5rem 0.9rem;
+    font-size: 0.88rem;
   }
 
   .barline-row {
     grid-template-columns: 6.5rem minmax(0, 1fr) 3rem;
-    font-size: 0.68rem;
+    font-size: 0.78rem;
   }
 
-  .why-card {
-    width: calc(100% - 1.4rem);
+  .readout-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tally-fig {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -2480,5 +3356,11 @@ footer p {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
+  }
+
+  .scan::before {
+    animation: none;
+    width: 100%;
+    background: radial-gradient(110% 90% at 50% 50%, transparent 55%, color-mix(in srgb, var(--red-lit) 26%, transparent));
   }
 }

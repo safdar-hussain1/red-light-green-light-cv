@@ -141,8 +141,63 @@ def test_page_is_valid_enough_to_open(html):
 
 def test_shell_has_the_regions_the_arena_will_fill(html):
     """The placeholders the interactive build hangs itself on are present."""
-    for anchor in ('id="arena"', 'id="results"', "<header"):
+    for anchor in (
+        'id="arena"',
+        'id="demoCanvas"',
+        'id="how"',
+        'id="accuracy"',
+        'id="measurements"',
+        'id="results"',
+        "<header",
+    ):
         assert anchor in html, f"missing page region {anchor!r}"
+
+
+def test_every_in_page_link_has_a_target(html):
+    """A `#name` link that points at nothing scrolls nowhere and switches no view.
+
+    The page moves between its game and measurements views by hash, so a
+    renamed section would leave a dead link in the navigation without this.
+    """
+    ids = set(re.findall(r'\sid="([^"]+)"', html))
+    targets = set(re.findall(r'href="#([^"]+)"', html))
+    assert targets, "expected in-page links"
+    missing = sorted(targets - ids)
+    assert missing == [], f"links with no target on the page: {missing}"
+
+
+# --------------------------------------------------------------------------
+# Typefaces
+# --------------------------------------------------------------------------
+
+FONTS_DIR = REPO_ROOT / "site" / "fonts"
+
+
+def test_fonts_are_inlined_as_data_uris(html):
+    """The page makes no font request of its own: every face rides along inside it."""
+    assert not re.search(r"url\(\s*[\"']?fonts/", html), "a font is still linked by path"
+    faces = re.findall(r"@font-face\s*{(.*?)}", html, re.S)
+    assert len(faces) >= 3, f"expected the three typeface files, found {len(faces)} faces"
+    for face in faces:
+        assert 'url("data:font/woff2;base64,' in face, f"a face without an inlined file: {face[:80]}"
+
+
+def test_every_font_file_is_used_and_accounted_for():
+    """Each file in site/fonts is named by a stylesheet and in the licence notice."""
+    styles = "".join(path.read_text(encoding="utf-8") for path in (REPO_ROOT / "site").glob("*.css"))
+    notice = (FONTS_DIR / "NOTICE.md").read_text(encoding="utf-8")
+    fonts = sorted(FONTS_DIR.glob("*.woff2"))
+    assert fonts, "no typeface files in site/fonts"
+    for font in fonts:
+        assert f"fonts/{font.name}" in styles, f"{font.name} is shipped but no stylesheet uses it"
+        assert font.name in notice, f"{font.name} is missing from site/fonts/NOTICE.md"
+        assert font.read_bytes()[:4] == b"wOF2", f"{font.name} is not a WOFF2 file"
+
+
+def test_a_missing_font_fails_the_build():
+    """A face that is not there must stop the build, not fall back silently."""
+    with pytest.raises(FileNotFoundError):
+        export._inline_fonts('src: url("fonts/not-a-font.woff2")', Path("style.css"))
 
 
 MAX_DEMO_VIDEO_BYTES = 5 * 1024 * 1024

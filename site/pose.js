@@ -350,13 +350,18 @@ class BoxStabilizer {
  * disagree on how the pixels were resampled. The result is a
  * `Uint8ClampedArray`, which `diffScoreWindow` accepts directly.
  *
+ * The frame can be a camera `<video>` or a `<canvas>`: the demo match draws
+ * its players on one, and is cropped exactly the way a camera frame is. A
+ * video reports its frame size as `videoWidth`/`videoHeight`, a canvas as
+ * `width`/`height`.
+ *
  * @returns {Uint8ClampedArray|null} 9216 bytes, or null if the box has
  *   collapsed to nothing — which happens for a frame or two when a player
  *   walks off the edge, and must not be scored as stillness.
  */
 function cropWindow(video, box, canvasCtx) {
-  const frameW = video.videoWidth;
-  const frameH = video.videoHeight;
+  const frameW = video.videoWidth || video.width;
+  const frameH = video.videoHeight || video.height;
   if (!frameW || !frameH) return null;
 
   const sx = box.x1 * frameW;

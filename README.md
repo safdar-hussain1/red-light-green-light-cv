@@ -25,10 +25,11 @@ crossed boxes labelled OUT are players who already moved.*
 
 ## What is here
 
-- **A browser arena that plays.** Pose detection, tracking, the judge and
-  the game rules all run in the tab. Every frame stays on your device:
-  nothing is uploaded, nothing is recorded, nothing survives the tab
-  closing.
+- **A browser arena that plays.** The page opens on a demo match between
+  drawn players, called by the same referee that then plays you on your
+  webcam: pose detection, tracking, the judge and the game rules all run in
+  the tab. Every frame stays on your device: nothing is uploaded, nothing
+  is recorded, nothing survives the tab closing.
 - **A Python engine and CLI.** `redlight play` referees a webcam or a video
   file with YOLO11n or weights-free HOG detection, draws a HUD, and reports
   how the match ended.
@@ -42,7 +43,7 @@ crossed boxes labelled OUT are players who already moved.*
 - **Browser/Python parity, bit for bit.** The scoring kernel in the tab and
   the one in Python produce identical numbers on shared golden 96 × 96
   window fixtures. Exact equality, not a tolerance.
-- **287 tests** (285 without the two slow ones), and six load-bearing
+- **291 tests** (289 without the two slow ones), and six load-bearing
   claims checked by mutating the mechanism behind each one: **6 of 6
   mutations were caught** by tests that already existed.
 
@@ -103,8 +104,8 @@ else Ultralytics first downloads its own copy of `yolo11n.pt` into
 ### Test
 
 ```bash
-pytest                            # 287 passed, one to two minutes
-pytest -m "not slow"              # 285 passed, 2 deselected: skips the two YOLO passes over the footage
+pytest                            # 291 passed, one to two minutes
+pytest -m "not slow"              # 289 passed, 2 deselected: skips the two YOLO passes over the footage
 pytest tests/test_js_parity.py    # the browser/Python parity suite under Node: 17 passed
 ```
 
@@ -112,7 +113,7 @@ CI runs the whole suite with nothing skipped: it needs no camera, no GPU
 and no private data, because the weights and the footage are committed. The
 one skip is local: in a copy with no git history (a ZIP download),
 `tests/test_framing.py` skips, because it scans `git ls-files`, and `pytest`
-reports `271 passed, 1 skipped`.
+reports `275 passed, 1 skipped`.
 
 ### Play a match
 
@@ -265,24 +266,27 @@ verdict into the tab title: `SELFTEST PASS n=59`. `?theme=light` or
 `?theme=dark` forces a theme.
 
 With Google Chrome or Chromium installed, one script drives the built page
-the way a visitor would — the selftest, a whole match against a fake camera
-(a walker who must be called out and a statue who must survive two red
-lights), and the recorded replay — then saves screenshots of every section
-in both themes to `reports/site/`, which is gitignored:
+the way a visitor would — the selftest, the demo match the page opens on
+(only the two drawn players written to move may be called), a whole match
+against a fake camera (a walker who must be called out and a statue who
+must survive two red lights), and the recorded replay — then saves
+screenshots of every section in both themes to `reports/site/`, which is
+gitignored:
 
 ```bash
 python scripts/verify_site.py
 # PASS  fixture selftest                           SELFTEST PASS n=59
+# PASS  demo match calls the two movers only       PROBE LOBBY>demo>COUNTDOWN>GREEN>RED>out:2>GREEN>RED>out:4>GREEN>RED>GREEN>VICTORY>end:VICTORY
 # PASS  play path reaches a countdown              PROBE LOBBY>camera>COUNTDOWN>GREEN>RED>out:1>GREEN>RED>GREEN>RED
 # PASS  play path reaches a green light            (same probe)
 # PASS  play path covers two red lights            (same probe)
 # PASS  a walking player is called out             (same probe)
 # PASS  a still player survives both red lights    (same probe)
-# PASS  the cutoff is calibrated on the countdown  Calibrated to your camera: cutoff 0.2910. ...
+# PASS  the cutoff is calibrated on the countdown  Calibrated to your camera: its noise sits well under the line.
 # PASS  replay runs without a camera               PROBE LOBBY>replay>COUNTDOWN>GREEN>RED>GREEN>RED>GREEN
-# PASS  screenshots written                        16 files
+# PASS  screenshots written                        18 files
 
-python scripts/verify_site.py --no-shots     # the eight checks only, about 35 s
+python scripts/verify_site.py --no-shots     # the nine checks only, about two and a half minutes
 python scripts/verify_site.py --shots-only   # the screenshots, then the play path again to capture it
 ```
 
@@ -579,8 +583,9 @@ it at people who have not chosen to play.
 ```
 src/redlight/        the engine: detection, tracking, judge, game, HUD, CLI,
                      audio, the benchmark harness, and the site build
-site/                the browser arena: judge, game, pose, arena, lab, charts,
-                     chant, doll, confetti, styles, page template
+site/                the browser arena: judge, game, pose, arena, the demo
+                     match, lab, charts, chant, doll, confetti, the page's
+                     two views, styles, typefaces, page template
 docs/index.html      the built page, served by GitHub Pages
 docs/                beside it: favicon.svg, og-image.png (the share image),
                      sitemap.xml, and the recorded match (demo_match.mp4 and
@@ -590,7 +595,7 @@ docs/DESIGN.md       the design card: pipeline contracts, judge math,
 notebooks/           judge_design.ipynb — how the judge was arrived at
 reports/             benchmark_results.json and the committed figures
 scripts/             figure rendering, weight fetching, site verification
-tests/               287 tests, including browser/Python parity, framing and
+tests/               291 tests, including browser/Python parity, framing and
                      the page's metadata
 data/, models/       ground-truth footage and the YOLO11n weights
 assets/              the synthesised chant, doll_song.wav
@@ -603,16 +608,20 @@ Python (tested on 3.12 and 3.13; the package declares 3.10+), NumPy,
 OpenCV, Ultralytics YOLO11n, scikit-learn and matplotlib for the benchmark
 and figures, pygame for optional sound. The
 browser side is plain JavaScript with no build step — MediaPipe Tasks Vision
-for pose and Chart.js for the result charts, both pinned. Tests are pytest,
-with Node driving the parity suite.
+for pose and Chart.js for the result charts, both pinned — set in Black Han
+Sans and IBM Plex Sans KR. Tests are pytest, with Node driving the parity
+suite.
 
 ## Licence
 
 This code is MIT licensed — see [LICENSE](LICENSE).
 
-Two things in the repository carry other terms:
+Three things in the repository carry other terms:
 
 - `data/vtest.avi` is an OpenCV sample video, BSD licensed.
+- The typefaces in `site/fonts/`, Black Han Sans and IBM Plex Sans KR, are
+  under the SIL Open Font License 1.1; `site/fonts/NOTICE.md` lists each
+  file and its copyright.
 - `models/yolo11n.pt` is an Ultralytics YOLO11 model. Ultralytics is an
   AGPL-3.0 runtime dependency; if you redistribute or host something built
   on those weights, read their licence and comply with it.

@@ -27,7 +27,7 @@
     <meta property="og:image:height" content="630" />
     <meta
       property="og:image:alt"
-      content="The Red Light, Green Light page: the headline with RED LIGHT lit and GREEN LIGHT dimmed, the Play and Watch a recorded match buttons, and the referee doll facing forward for a red light."
+      content="Red Light, Green Light: the headline with Red light lit, beside the arena mid-match, where two drawn players are stamped OUT on a red light and the referee doll's eyes glow red."
     />
 
     <meta name="twitter:card" content="summary_large_image" />
@@ -39,7 +39,7 @@
     <meta name="twitter:image" content="https://safdar-hussain1.github.io/red-light-green-light-cv/og-image.png" />
     <meta
       name="twitter:image:alt"
-      content="The Red Light, Green Light page: the headline with RED LIGHT lit and GREEN LIGHT dimmed, the Play and Watch a recorded match buttons, and the referee doll facing forward for a red light."
+      content="Red Light, Green Light: the headline with Red light lit, beside the arena mid-match, where two drawn players are stamped OUT on a red light and the referee doll's eyes glow red."
     />
 
     <script type="application/ld+json">
@@ -164,588 +164,688 @@
       window.RL_DATA = /*__DATA__*/;
     </script>
   </head>
-
   <body>
-    <a class="skip-link" href="#arena">Skip to the arena</a>
+    <a class="skip-link" href="#arena">Skip to the game</a>
 
-    <div class="wrap">
-      <div class="brandbar">
-        <span class="mark">RL/GL</span>
-        <span class="tag">Every frame stays on your device</span>
-        <span class="spacer"></span>
-        <button class="btn btn-icon" id="themeToggle" type="button">Night game</button>
+    <!--
+      Icons, drawn once and reused by reference. Each is a plain stroke
+      drawing on a 24-unit grid, so it takes the colour of the text around it.
+    -->
+    <svg class="icon-sprite" aria-hidden="true" focusable="false">
+      <symbol id="i-camera" viewBox="0 0 24 24">
+        <path d="M3.5 8.5a2 2 0 0 1 2-2h2.2l1.6-2h5.4l1.6 2h2.2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" />
+        <circle cx="12" cy="13" r="3.6" />
+      </symbol>
+      <symbol id="i-play" viewBox="0 0 24 24">
+        <path d="M8 5.6v12.8a.8.8 0 0 0 1.2.7l10.2-6.4a.8.8 0 0 0 0-1.4L9.2 4.9A.8.8 0 0 0 8 5.6z" fill="currentColor" stroke="none" />
+      </symbol>
+      <symbol id="i-stop" viewBox="0 0 24 24">
+        <rect x="6.5" y="6.5" width="11" height="11" rx="2" fill="currentColor" stroke="none" />
+      </symbol>
+      <symbol id="i-lock" viewBox="0 0 24 24">
+        <rect x="5" y="10.5" width="14" height="10" rx="2.2" />
+        <path d="M8.2 10.5V7.8a3.8 3.8 0 0 1 7.6 0v2.7" />
+      </symbol>
+      <symbol id="i-sun" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="4.2" />
+        <path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6" />
+      </symbol>
+      <symbol id="i-moon" viewBox="0 0 24 24">
+        <path d="M19.5 14.6A7.8 7.8 0 0 1 9.4 4.5a7.8 7.8 0 1 0 10.1 10.1z" />
+      </symbol>
+      <symbol id="i-sound" viewBox="0 0 24 24">
+        <path d="M4 9.2h3.6L12.4 5v14l-4.8-4.2H4z" />
+        <path d="M15.8 9a4.4 4.4 0 0 1 0 6M18.4 6.4a8.2 8.2 0 0 1 0 11.2" />
+      </symbol>
+      <symbol id="i-mute" viewBox="0 0 24 24">
+        <path d="M4 9.2h3.6L12.4 5v14l-4.8-4.2H4z" />
+        <path d="M16 9.5l5 5M21 9.5l-5 5" />
+      </symbol>
+      <symbol id="i-back" viewBox="0 0 24 24">
+        <path d="M19 12H5.5M11 6l-6 6 6 6" />
+      </symbol>
+      <symbol id="i-github" viewBox="0 0 24 24">
+        <path
+          fill="currentColor"
+          stroke="none"
+          d="M12 1.6a10.4 10.4 0 0 0-3.3 20.3c.5.1.7-.2.7-.5v-1.8c-2.9.6-3.5-1.4-3.5-1.4-.5-1.2-1.2-1.5-1.2-1.5-.9-.6.1-.6.1-.6 1 .1 1.6 1.1 1.6 1.1.9 1.6 2.4 1.1 3 .9.1-.7.4-1.1.7-1.4-2.3-.3-4.7-1.2-4.7-5.1 0-1.1.4-2 1.1-2.8-.1-.3-.5-1.3.1-2.8 0 0 .9-.3 2.9 1.1a9.9 9.9 0 0 1 5.2 0c2-1.4 2.9-1.1 2.9-1.1.6 1.5.2 2.5.1 2.8.7.8 1.1 1.7 1.1 2.8 0 4-2.4 4.8-4.7 5.1.4.3.7 1 .7 1.9v2.8c0 .3.2.6.7.5A10.4 10.4 0 0 0 12 1.6z"
+        />
+      </symbol>
+    </svg>
+
+    <header class="topbar">
+      <div class="wrap topbar-inner">
+        <a class="brand" href="#arena" data-route="home">
+          <span class="brand-lamp" aria-hidden="true"></span>
+          <span class="brand-name">Red Light, Green Light</span>
+        </a>
+        <nav class="nav" aria-label="Page">
+          <a href="#how" data-route="home">How it works</a>
+          <a href="#accuracy" data-route="home">Accuracy</a>
+          <a href="#measurements" data-route="measurements">Measurements</a>
+          <a class="nav-source" href="https://github.com/safdar-hussain1/red-light-green-light-cv">
+            <svg class="icon" aria-hidden="true"><use href="#i-github" /></svg>
+            <span>Source</span>
+          </a>
+        </nav>
+        <button class="icon-btn" id="themeToggle" type="button" aria-label="Switch theme">
+          <svg class="icon icon-sun" aria-hidden="true"><use href="#i-sun" /></svg>
+          <svg class="icon icon-moon" aria-hidden="true"><use href="#i-moon" /></svg>
+        </button>
       </div>
+    </header>
 
-      <header class="masthead">
-        <div>
-          <h1 class="title">
-            <span class="w-red">Red light,</span>
-            <span class="w-green">Green light</span>
-          </h1>
-          <p class="lede">
-            Stand in front of your webcam and hold still — the Squid Game
-            challenge, refereed live. A referee finds everyone in frame,
-            measures how much of each body changes every tenth of a second,
-            and calls out anyone who moves while the light is red. It runs in
-            this tab, on your machine, and it is the same scoring kernel the
-            Python engine uses.
-          </p>
-          <div class="cta-row">
-            <a class="btn btn-play" href="#arena" data-play-scroll>Play</a>
-            <button class="btn btn-ghost" type="button" data-replay>
-              Watch a recorded match
-            </button>
+    <main id="main">
+      <!-- ================================================ the game view === -->
+      <div class="view" id="home" data-view="home">
+        <section class="hero" id="arena" aria-labelledby="sign">
+          <!-- The arena's walls are painted to look like sky. So is this. -->
+          <div class="sky" aria-hidden="true">
+            <span class="cloud cloud-a"></span>
+            <span class="cloud cloud-b"></span>
+            <span class="cloud cloud-c"></span>
+            <span class="cloud cloud-d"></span>
           </div>
-          <dl class="specstrip">
-            <div>
-              <dt>Scoring clock</dt>
-              <dd id="factClock">every 0.1 s</dd>
-            </div>
-            <div>
-              <dt>Analysis window</dt>
-              <dd id="factWindow">96 &times; 96 px</dd>
-            </div>
-            <div>
-              <dt>Measured cutoff</dt>
-              <dd id="factCutoff">&mdash;</dd>
-            </div>
-          </dl>
-        </div>
+          <div class="field" aria-hidden="true"></div>
 
-        <figure class="hero-doll">
-          <div class="doll-mount" id="heroDoll"></div>
-          <figcaption class="doll-caption" id="heroDollCaption">
-            Green light — go
-          </figcaption>
-        </figure>
-      </header>
+          <div class="wrap hero-inner">
+            <div class="hero-head">
+              <h1 class="sign" id="sign" data-lit="none">
+                <span class="sign-line sign-red">Red light,</span>
+                <span class="sign-line sign-green">Green light</span>
+              </h1>
 
-      <main>
-        <!-- ---------------------------------------------------- arena --->
-        <section id="arena" aria-labelledby="arenaTitle">
-          <p class="eyebrow">The arena</p>
-          <h2 id="arenaTitle">Hold still</h2>
-          <p class="lede">
-            The camera opens in this tab and never leaves it. Registration
-            closes when the countdown starts, so whoever is standing in frame
-            at that moment is who the referee is watching.
-          </p>
-
-          <div class="arena-grid">
-            <div>
-              <div class="stage" id="stage" data-phase="LOBBY">
-                <video id="cam" playsinline muted autoplay></video>
-                <div class="overlay" id="overlay"></div>
-                <div class="flash" id="flash"></div>
-                <div class="lights-out" id="lightsOut" data-on="false"></div>
-                <canvas class="fx" id="fx" aria-hidden="true"></canvas>
-
-                <div class="stage-idle" id="stageIdle">
-                  <h3>Ready when you are</h3>
-                  <p>
-                    Your browser will ask for the camera. Nothing is uploaded
-                    and nothing is recorded — if you would rather not, watch
-                    the referee call a real recorded match instead.
-                  </p>
-                  <div class="cta-row" style="justify-content: center">
-                    <button class="btn btn-play" id="btnPlay" type="button">Play</button>
-                    <button class="btn btn-ghost" type="button" data-replay>
-                      Watch a recorded match
-                    </button>
-                  </div>
+              <div class="hero-copy">
+                <p class="lede">
+                  Walk while the light is green. Freeze the moment it turns
+                  red. A computer-vision referee watches your webcam and
+                  calls out anyone who moves.
+                </p>
+                <div class="cta-row">
+                  <button class="btn btn-primary" id="btnPlay" type="button">
+                    <svg class="icon" aria-hidden="true"><use href="#i-camera" /></svg>
+                    Play with your camera
+                  </button>
+                  <button class="btn btn-secondary" type="button" data-replay>
+                    <svg class="icon" aria-hidden="true"><use href="#i-play" /></svg>
+                    Watch a recorded match
+                  </button>
                 </div>
+                <p class="privacy-line">
+                  <svg class="icon" aria-hidden="true"><use href="#i-lock" /></svg>
+                  Runs in this tab. Your camera picture never leaves your device.
+                </p>
+              </div>
+            </div>
 
-                <div class="why-card" id="whyCard"></div>
+            <div class="console" id="console">
+              <div class="stage-col">
+                <div class="stage" id="stage" data-phase="LOBBY" data-mode="demo">
+                  <canvas class="demo-canvas" id="demoCanvas" width="640" height="480" aria-hidden="true"></canvas>
+                  <video id="cam" playsinline muted autoplay></video>
+                  <div class="scan" aria-hidden="true"></div>
+                  <div class="overlay" id="overlay"></div>
+                  <div class="flash" id="flash"></div>
+                  <div class="lights-out" id="lightsOut" data-on="false"></div>
+                  <canvas class="fx" id="fx" aria-hidden="true"></canvas>
 
-                <div class="endcard" id="endCard" data-outcome="VICTORY">
-                  <div class="endcard-inner">
-                    <p class="endcard-eyebrow" id="endEyebrow">The clock ran out</p>
-                    <h3 id="endTitle">Victory</h3>
-                    <p class="endcard-score" id="endScore"></p>
-                    <p class="endcard-detail" id="endDetail"></p>
-                    <div class="cta-row" style="justify-content: center">
-                      <button class="btn btn-play" id="btnAgain" type="button">
-                        Play again
+                  <p class="stage-badge" id="stageBadge">
+                    <span class="badge-dot" aria-hidden="true"></span>
+                    <span id="stageBadgeText">Demo match</span>
+                  </p>
+
+                  <div class="stage-idle" id="stageIdle" hidden>
+                    <h2 class="idle-title">Ready when you are</h2>
+                    <p class="idle-text">
+                      Your browser will ask for the camera. Nothing is uploaded
+                      and nothing is recorded.
+                    </p>
+                    <div class="cta-row">
+                      <button class="btn btn-primary" type="button" data-action="demo">
+                        <svg class="icon" aria-hidden="true"><use href="#i-play" /></svg>
+                        Watch the demo match
                       </button>
                     </div>
                   </div>
+
+                  <div class="why-card" id="whyCard"></div>
+
+                  <div class="endcard" id="endCard" data-outcome="VICTORY">
+                    <div class="endcard-inner">
+                      <p class="endcard-eyebrow" id="endEyebrow">The clock ran out</p>
+                      <h2 class="endcard-title" id="endTitle">Victory</h2>
+                      <p class="endcard-score" id="endScore"></p>
+                      <p class="endcard-detail" id="endDetail"></p>
+                      <div class="cta-row">
+                        <button class="btn btn-primary" id="btnAgain" type="button">
+                          <svg class="icon" aria-hidden="true"><use href="#i-camera" /></svg>
+                          <span id="btnAgainText">Play again</span>
+                        </button>
+                        <button class="btn btn-secondary" id="btnEndSecond" type="button" data-action="demo">
+                          Watch the demo match
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="console-bar">
+                  <p class="stage-caption" id="stageCaption">
+                    Drawn players walk on green and freeze on red. The boxes,
+                    movement meters and calls come from the real referee; only
+                    the pose model is skipped.
+                  </p>
+                  <div class="controls">
+                    <div class="segmented" id="difficulty" role="group" aria-label="Difficulty">
+                      <button type="button" data-level="forgiving" aria-pressed="false">Forgiving</button>
+                      <button type="button" data-level="standard" aria-pressed="true">Standard</button>
+                      <button type="button" data-level="ruthless" aria-pressed="false">Ruthless</button>
+                    </div>
+                    <button class="icon-btn icon-btn-dark" id="btnSound" type="button" aria-pressed="true" aria-label="Sound on">
+                      <svg class="icon icon-on" aria-hidden="true"><use href="#i-sound" /></svg>
+                      <svg class="icon icon-off" aria-hidden="true"><use href="#i-mute" /></svg>
+                    </button>
+                    <button class="btn btn-stop" id="btnStop" type="button" hidden>
+                      <svg class="icon" aria-hidden="true"><use href="#i-stop" /></svg>
+                      Stop
+                    </button>
+                  </div>
+                  <p class="difficulty-note" id="difficultyNote"></p>
+                  <p class="calibration-note" id="calibrationNote"></p>
                 </div>
               </div>
 
-              <div class="stage-controls">
-                <div class="segmented" id="difficulty" role="group" aria-label="Difficulty">
-                  <button type="button" data-level="forgiving" aria-pressed="false">
-                    Forgiving
-                  </button>
-                  <button type="button" data-level="standard" aria-pressed="true">
-                    Standard
-                  </button>
-                  <button type="button" data-level="ruthless" aria-pressed="false">
-                    Ruthless
-                  </button>
+              <aside class="referee" aria-label="The referee">
+                <div class="lamp" id="lamp" data-phase="LOBBY">
+                  <div class="doll-mount" id="arenaDoll"></div>
                 </div>
-                <button class="btn btn-quiet" id="btnSound" type="button" aria-pressed="true">
-                  Sound on
-                </button>
-                <p class="difficulty-note" id="difficultyNote"></p>
-                <p class="difficulty-note">
-                  Standard adds real-camera headroom for breathing and sensor
-                  noise; Ruthless is the lab-measured midpoint, taken on
-                  footage of people walking rather than on anyone standing in
-                  a living room.
+                <p class="light-state" id="phasePill" data-phase="LOBBY">
+                  <span class="light-word" id="phaseWord">Lobby</span>
+                  <span class="light-sub" id="phaseSub">Waiting</span>
                 </p>
-              </div>
-
-              <p class="privacy">
-                <strong>Every frame is processed on this device.</strong>
-                Nothing is uploaded, nothing is recorded, and nothing is kept
-                after the tab closes. The pose model is fetched once, when you
-                press play; the video never goes anywhere.
-              </p>
-            </div>
-
-            <aside class="sidebar">
-              <div class="panel">
-                <p class="panel-title">The referee</p>
-                <div class="doll-mount" id="arenaDoll"></div>
-                <div style="text-align: center; margin: 0.6rem 0 0.8rem">
-                  <span class="phase-pill" id="phasePill" data-phase="LOBBY">
-                    <span id="phaseWord">Lobby</span>
-                    <span class="sub" id="phaseSub">Waiting</span>
-                  </span>
+                <div class="timer" id="timer" data-phase="LOBBY">
+                  <div class="timer-digits" id="timerDigits" aria-hidden="true"></div>
+                  <p class="timer-label" id="timerLabel">waiting</p>
                 </div>
-                <svg class="ring" id="ring" viewBox="0 0 128 128" aria-hidden="true">
-                  <circle class="track" cx="64" cy="64" r="54"></circle>
-                  <circle
-                    class="sweep"
-                    cx="64"
-                    cy="64"
-                    r="54"
-                    stroke-dasharray="339.29"
-                    stroke-dashoffset="339.29"
-                  ></circle>
-                  <text id="ringValue" x="64" y="72">&ndash;</text>
-                  <text class="ring-unit" id="ringUnit" x="64" y="90">waiting</text>
-                </svg>
+                <div class="roster-block">
+                  <p class="roster-title">Players</p>
+                  <div class="roster" id="roster"></div>
+                </div>
                 <p class="visually-hidden" id="arenaStatus" role="status" aria-live="polite"></p>
-              </div>
-
-              <div class="panel">
-                <p class="panel-title">Players · body-fractions per second</p>
-                <div class="roster" id="roster"></div>
-                <p class="note" style="margin: 0.6rem 0 0">
-                  The tick on each meter is the cutoff. A player is called out
-                  when the smoothed score stays past it for three samples in a
-                  row.
-                </p>
-                <p class="note" id="calibrationNote" style="margin: 0.5rem 0 0"></p>
-              </div>
-
-            </aside>
-          </div>
-        </section>
-
-        <!-- ------------------------------------------------- pipeline --->
-        <section id="pipeline" aria-labelledby="pipelineTitle">
-          <p class="eyebrow">How the referee works</p>
-          <h2 id="pipelineTitle">Six steps, one number</h2>
-          <p class="lede">
-            The referee never asks what a person is doing. It asks how much of
-            them changed since the last sample, and compares that against a
-            cutoff that was measured rather than guessed.
-          </p>
-
-          <div class="panel">
-            <div class="pipeline-figure">
-              <svg viewBox="0 0 1070 158" role="img" aria-labelledby="pipelineFigTitle">
-                <title id="pipelineFigTitle">
-                  Camera frame to pose landmarks to a padded box per player to a
-                  96 by 96 grey window to a changed-pixel score to hysteresis to
-                  a verdict
-                </title>
-                <defs>
-                  <marker
-                    id="pipe-head"
-                    viewBox="0 0 10 10"
-                    refX="9"
-                    refY="5"
-                    markerWidth="6"
-                    markerHeight="6"
-                    orient="auto-start-reverse"
-                  >
-                    <path d="M0 0 10 5 0 10z" fill="currentColor" opacity="0.5" />
-                  </marker>
-                </defs>
-
-                <g class="pipe-sub">
-                  <text x="10" y="30">01</text>
-                  <text x="160" y="30">02</text>
-                  <text x="310" y="30">03</text>
-                  <text x="460" y="30">04</text>
-                  <text x="610" y="30">05</text>
-                  <text x="760" y="30">06</text>
-                </g>
-
-                <rect class="pipe-box" x="10" y="40" width="138" height="70" rx="10" />
-                <text class="pipe-label" x="24" y="66">Camera frame</text>
-                <text class="pipe-sub" x="24" y="84">this device only</text>
-                <text class="pipe-sub" x="24" y="98">never uploaded</text>
-
-                <rect class="pipe-box" x="160" y="40" width="138" height="70" rx="10" />
-                <text class="pipe-label" x="174" y="66">Pose landmarks</text>
-                <text class="pipe-sub" x="174" y="84">up to 4 people</text>
-                <text class="pipe-sub" x="174" y="98">matched by overlap</text>
-
-                <rect class="pipe-box" x="310" y="40" width="138" height="70" rx="10" />
-                <text class="pipe-label" x="324" y="66">Box per player</text>
-                <text class="pipe-sub" x="324" y="84">grown 15%</text>
-                <text class="pipe-sub" x="324" y="98">clamped to frame</text>
-
-                <rect class="pipe-box" x="460" y="40" width="138" height="70" rx="10" />
-                <text class="pipe-label" x="474" y="66">96 &times; 96 grey</text>
-                <text class="pipe-sub" x="474" y="84">distance divides out</text>
-                <text class="pipe-sub" x="474" y="98">every 0.1 s</text>
-
-                <rect class="pipe-box" x="610" y="40" width="138" height="70" rx="10" />
-                <text class="pipe-label" x="624" y="66">Score</text>
-                <text class="pipe-sub" x="624" y="84">changed px / 9216</text>
-                <text class="pipe-sub" x="624" y="98">divided by dt</text>
-
-                <rect class="pipe-box" x="760" y="40" width="138" height="70" rx="10" />
-                <text class="pipe-label" x="774" y="66">Hysteresis</text>
-                <text class="pipe-sub" x="774" y="84">average, weight 0.5</text>
-                <text class="pipe-sub" x="774" y="98">3 samples in a row</text>
-
-                <g class="pipe-arrow" color="currentColor">
-                  <path d="M148 75h12" />
-                  <path d="M298 75h12" />
-                  <path d="M448 75h12" />
-                  <path d="M598 75h12" />
-                  <path d="M748 75h12" />
-                  <path d="M898 75h20" />
-                </g>
-
-                <rect class="pipe-verdict-green" x="920" y="40" width="130" height="30" rx="15" />
-                <text class="pipe-label" x="985" y="60" text-anchor="middle" fill="#04120a">
-                  Still standing
-                </text>
-                <rect class="pipe-verdict-red" x="920" y="80" width="130" height="30" rx="15" />
-                <text class="pipe-label" x="985" y="100" text-anchor="middle" fill="#ffffff">
-                  Out
-                </text>
-              </svg>
-            </div>
-
-            <div class="split" style="margin-top: 1.4rem">
-              <div>
-                <h3>Why body-fractions per second</h3>
-                <p class="note">
-                  A step taken two metres from the camera moves more pixels than
-                  the same step taken ten metres away. Cropping to the player's
-                  own box and resampling every crop to the same 96 &times; 96
-                  window divides that out: the score is the fraction of
-                  <em>that player</em> that changed, so standing closer does not
-                  make you guiltier.
-                </p>
-              </div>
-              <div>
-                <h3>Why a fixed clock</h3>
-                <p class="note">
-                  A changed-pixel count does not grow linearly with how long you
-                  waited, so dividing by the frame gap does not make it fair
-                  across frame rates. Holding the measurement interval at 0.1 s
-                  does. A laptop at 60 fps and a phone at 24 judge the same
-                  motion over the same slice of time, and the benchmark measures
-                  the result: identical verdicts at 10 and 30 fps.
-                </p>
-              </div>
-            </div>
-
-            <div class="claim" style="margin-top: 1.2rem">
-              <span class="stamp">Tested</span>
-              <p>
-                The scoring kernel in this tab and the one in the Python engine
-                agree bit for bit on a shared set of golden 96 &times; 96 window
-                pairs — identical frames, sensor noise, single pixels sitting
-                exactly on the change threshold and one step past it, block
-                shifts. The comparison is exact equality, not a tolerance, and
-                you can run it here:
-                <a href="?selftest=1">re-run the fixtures in this browser</a>.
-                The verdict is written into the page title.
-              </p>
+              </aside>
             </div>
           </div>
         </section>
 
-        <!-- ------------------------------------------------------ lab --->
-        <section id="lab" aria-labelledby="labTitle">
-          <p class="eyebrow">Referee lab</p>
-          <h2 id="labTitle">Move the cutoff, watch the calls</h2>
-          <p class="lede">
-            Eight real player traces from one red light in the benchmark
-            footage: five people who were moving, three who were frozen. Drag
-            the dashed line. Every verdict is recomputed through the same judge
-            the arena runs, with the same three-in-a-row confirmation.
-          </p>
-
-          <div class="lab-grid">
-            <div class="plot-frame" id="labPlot"></div>
-
-            <div class="sidebar">
-              <div class="panel">
-                <p class="panel-title">At this cutoff</p>
-                <p class="big-read" id="labHeadline"></p>
-                <label for="labSlider" class="panel-title" style="margin-top: 0.9rem">
-                  Cutoff, body-fractions per second
-                </label>
-                <input type="range" id="labSlider" aria-describedby="labBand" />
-                <p class="note" id="labBand" style="margin: 0.4rem 0 0.8rem"></p>
-                <button class="btn btn-quiet" id="labReset" type="button">
-                  Back to the measured cutoff
-                </button>
-              </div>
-
-              <div class="panel">
-                <p class="panel-title">Verdicts</p>
-                <div class="tally" id="labTally"></div>
-              </div>
-            </div>
-          </div>
-
-          <p class="note" style="margin-top: 0.9rem; max-width: 78ch">
-            These are the flow scores the Python engine records, in the same
-            units as its cutoff. The dotted line is what the benchmark selected
-            — the midpoint between the 99th percentile of the frozen samples
-            and the 1st percentile of the moving ones. The shaded band is
-            every cutoff that produces the identical eight verdicts, found by
-            bisecting through the judge itself rather than by asserting that
-            the choice is robust.
-          </p>
-        </section>
-
-        <!-- ---------------------------------------------------- naive --->
-        <section id="naive" aria-labelledby="naiveTitle">
-          <p class="eyebrow">The obvious designs, measured</p>
-          <h2 id="naiveTitle">Three referees that look fine until you measure them</h2>
-          <p class="lede">
-            Each of these is a reasonable first idea, and each one was built and
-            scored against the same ground truth as the referee that shipped.
-            The numbers below are theirs.
-          </p>
-
-          <div class="control-row">
-            <label for="scaleControl">Apparent player size</label>
-            <div class="segmented" id="scaleControl" role="group" aria-label="Apparent player size">
-              <button type="button" data-scale="0.5x" aria-pressed="false">Half size</button>
-              <button type="button" data-scale="1x" aria-pressed="true">As measured</button>
-              <button type="button" data-scale="1.667x" aria-pressed="false">1.7&times; closer</button>
-            </div>
-          </div>
-
-          <div class="exhibits">
-            <div class="exhibit">
-              <div>
-                <h3>Watch the brightness</h3>
-                <p>
-                  Sum the pixels in the player's box and call any change
-                  movement. It needs no model and no motion estimate at all.
-                  What it actually tracks is how many pixels the player covers:
-                  shrink them and it never fires, bring them closer and it fires
-                  on everybody. Move the size control and watch the two numbers
-                  stay level with each other — it flags frozen players and
-                  moving players at the same rate, which is another way of
-                  saying it is a coin flip.
-                </p>
-              </div>
-              <div class="readout-grid">
-                <div class="readout" id="bxFrozen">
-                  <span class="k">Frozen flagged</span>
-                  <span class="v">&mdash;</span>
-                </div>
-                <div class="readout" id="bxMoving">
-                  <span class="k">Moving flagged</span>
-                  <span class="v">&mdash;</span>
-                </div>
-                <div class="readout" style="grid-column: 1 / -1">
-                  <span class="k">Area under the ROC curve — 0.5000 is a coin flip</span>
-                  <span class="v" id="bxAuc">&mdash;</span>
-                </div>
-              </div>
-            </div>
-
-            <div class="exhibit">
-              <div>
-                <h3>Difference the whole frame</h3>
-                <p>
-                  Subtract this frame from the last one, count the pixels that
-                  changed, and call it motion. On an empty room it works. Put
-                  one frozen player in a street scene and everybody else walking
-                  past is charged to them: the whole-frame score crosses its
-                  cutoff within a second and stays there for half the run, while
-                  the same player scored inside their own box reads exactly
-                  zero.
-                </p>
-                <div class="barline" id="bgBars"></div>
-              </div>
-              <div class="readout-grid">
-                <div class="readout" id="bgFirst" data-flavour="bad">
-                  <span class="k">First false call</span>
-                  <span class="v">&mdash;</span>
-                </div>
-                <div class="readout" id="bgPerBox" data-flavour="good">
-                  <span class="k">Same player, per box</span>
-                  <span class="v">&mdash;</span>
-                </div>
-              </div>
-            </div>
-
-            <div class="exhibit">
-              <div>
-                <h3>Measure flow in raw pixels</h3>
-                <p>
-                  Estimate optical flow inside the box and threshold the raw
-                  pixel magnitude. This one is nearly right, and it fails
-                  quietly: pixels per second is not a property of the player, it
-                  is a property of how many pixels the player happens to occupy.
-                  Dividing the flow by the box size before thresholding is the
-                  whole fix.
-                </p>
-                <p class="note" id="rawSpread"></p>
-              </div>
-              <div class="readout-grid">
-                <div class="readout" id="rawMoving">
-                  <span class="k">Raw flow, moving caught</span>
-                  <span class="v">&mdash;</span>
-                </div>
-                <div class="readout" id="normMoving">
-                  <span class="k">Per box, moving caught</span>
-                  <span class="v">&mdash;</span>
-                </div>
-                <div class="readout" id="diffMoving" style="grid-column: 1 / -1">
-                  <span class="k">Per-box diff — the metric this browser runs</span>
-                  <span class="v">&mdash;</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="limitation">
-            <span class="tagline">Where cropping stops helping</span>
-            <p id="bgLimitation"></p>
-          </div>
-        </section>
-
-        <!-- -------------------------------------------------- results --->
-        <section id="results" aria-labelledby="resultsTitle">
-          <p class="eyebrow">Measured results</p>
-          <h2 id="resultsTitle">What the benchmark says</h2>
-          <p class="lede">
-            One pass over the same footage, with every design scored on the same
-            samples. Ground truth comes from the tracker: a player whose box
-            centre moved is moving, a synthetically frozen crop with sensor
-            noise added on top is frozen.
-          </p>
-
-          <div class="chart-grid">
-            <div class="chart-card">
-              <h3>Five referee designs, same samples</h3>
-              <p class="note">
-                Catches against false alarms. A design is only useful when the
-                first bar is long and the second is not there at all.
-              </p>
-              <div class="chart-frame tall">
-                <canvas id="chartClassifiers"></canvas>
-              </div>
-              <p class="chart-missing">
-                The chart library did not load. The same numbers are in the
-                table below.
-              </p>
-              <p class="legend-row" id="legendClassifiers"></p>
-              <details class="table-view">
-                <summary>Table view</summary>
-                <table id="tableClassifiers"></table>
-              </details>
-            </div>
-
-            <div class="chart-card">
-              <h3>The same players, three apparent sizes</h3>
-              <p class="note">
-                How many moving players each design catches when the footage is
-                rescaled. A design that changes its mind here changes its mind
-                about how far away you are standing.
-              </p>
-              <div class="chart-frame tall">
-                <canvas id="chartResolution"></canvas>
-              </div>
-              <p class="chart-missing">
-                The chart library did not load. The same numbers are in the
-                table below.
-              </p>
-              <p class="legend-row" id="legendResolution"></p>
-              <details class="table-view">
-                <summary>Table view</summary>
-                <table id="tableResolution"></table>
-              </details>
-            </div>
-
-            <div class="chart-card">
-              <h3>Finding people costs real time</h3>
-              <p class="note">
-                Milliseconds per frame on the benchmark machine, single
-                threaded. HOG is the weights-free option: no model file to
-                fetch, and it pays for that in time.
-              </p>
-              <div class="chart-frame short">
-                <canvas id="chartDetector"></canvas>
-              </div>
-              <p class="chart-missing" id="missingDetector">
-                The chart library did not load.
-              </p>
-            </div>
-
-            <div class="chart-card">
-              <h3>Judging them costs almost none</h3>
-              <p class="note">
-                Milliseconds per player per sample. The diff metric is what this
-                browser runs, because dense flow is not affordable in a tab.
-              </p>
-              <div class="chart-frame short">
-                <canvas id="chartScoring"></canvas>
-              </div>
-              <p class="chart-missing" id="missingScoring">
-                The chart library did not load.
-              </p>
-            </div>
-          </div>
-
-          <div class="chart-card" style="margin-top: 1.1rem">
-            <h3>Frame rate changes nothing</h3>
-            <p class="note">
-              The same footage played at 10 and at 30 frames per second, judged
-              by the same fixed 0.1 s clock. This is the payoff for holding the
-              interval instead of rescaling the score.
+        <!-- ------------------------------------------------ how it works --->
+        <section class="band" id="how" aria-labelledby="howTitle">
+          <div class="wrap">
+            <h2 class="section-title" id="howTitle">How the referee works</h2>
+            <p class="section-lede">
+              Three steps, repeated ten times a second, all inside this tab.
             </p>
-            <dl class="stat-row" id="fpsStats"></dl>
-            <p class="note" id="benchMeta" style="margin: 0.9rem 0 0"></p>
+
+            <ol class="steps">
+              <li class="step">
+                <figure class="step-art" data-art="find" aria-hidden="true">
+                  <svg viewBox="0 0 320 200">
+                    <rect class="art-floor" x="0" y="150" width="320" height="50" />
+                    <g class="art-player">
+                      <ellipse class="art-shadow" cx="160" cy="172" rx="30" ry="5" />
+                      <rect class="art-leg" x="146" y="120" width="11" height="48" rx="5" />
+                      <rect class="art-leg" x="163" y="120" width="11" height="48" rx="5" />
+                      <rect class="art-suit" x="138" y="70" width="44" height="58" rx="12" />
+                      <rect class="art-bib" x="150" y="84" width="20" height="14" rx="2" />
+                      <rect class="art-arm" x="128" y="74" width="10" height="44" rx="5" />
+                      <rect class="art-arm" x="182" y="74" width="10" height="44" rx="5" />
+                      <circle class="art-skin" cx="160" cy="52" r="15" />
+                      <path class="art-hair" d="M145 50a15 15 0 0 1 30 0q-6-6-15-6t-15 6z" />
+                    </g>
+                    <g class="art-bones">
+                      <path d="M160 58v40M144 78l16-6 16 6M144 78l-8 20M176 78l8 20M152 112l8-14 8 14M152 112v40M168 112v40" />
+                    </g>
+                    <g class="art-joints">
+                      <circle cx="160" cy="52" r="3.6" style="--i: 0" />
+                      <circle cx="144" cy="78" r="3.6" style="--i: 1" />
+                      <circle cx="176" cy="78" r="3.6" style="--i: 2" />
+                      <circle cx="136" cy="98" r="3.6" style="--i: 3" />
+                      <circle cx="184" cy="98" r="3.6" style="--i: 4" />
+                      <circle cx="152" cy="112" r="3.6" style="--i: 5" />
+                      <circle cx="168" cy="112" r="3.6" style="--i: 6" />
+                      <circle cx="152" cy="152" r="3.6" style="--i: 7" />
+                      <circle cx="168" cy="152" r="3.6" style="--i: 8" />
+                    </g>
+                    <g class="art-box">
+                      <path d="M114 46v-14h16M206 32h16v14M222 160v14h-16M130 174h-16v-14" />
+                    </g>
+                    <g class="art-tag">
+                      <rect x="114" y="8" width="44" height="20" rx="3" />
+                      <text x="136" y="23" text-anchor="middle">001</text>
+                    </g>
+                  </svg>
+                </figure>
+                <h3 class="step-title"><span class="step-num">1</span>Find each player</h3>
+                <p>
+                  A pose model spots everyone in front of the camera, up to
+                  four players, and puts a box around each one. You keep your
+                  number for as long as you stay in view.
+                </p>
+              </li>
+
+              <li class="step">
+                <figure class="step-art" data-art="measure" aria-hidden="true">
+                  <svg viewBox="0 0 320 200">
+                    <g class="art-window" transform="translate(28 30)">
+                      <rect class="art-window-frame" x="-4" y="-4" width="104" height="104" rx="6" />
+                      <g class="art-pixels" id="artThen"></g>
+                      <text class="art-caption" x="48" y="126" text-anchor="middle">a tenth of a second ago</text>
+                    </g>
+                    <g class="art-window" transform="translate(192 30)">
+                      <rect class="art-window-frame" x="-4" y="-4" width="104" height="104" rx="6" />
+                      <g class="art-pixels" id="artNow"></g>
+                      <g class="art-changed" id="artChanged"></g>
+                      <text class="art-caption" x="48" y="126" text-anchor="middle">now</text>
+                    </g>
+                    <path class="art-arrow" d="M140 78h36M168 70l8 8-8 8" />
+                    <g class="art-meter" transform="translate(28 176)">
+                      <rect class="art-meter-track" x="0" y="0" width="264" height="10" rx="5" />
+                      <rect class="art-meter-fill" x="0" y="0" width="264" height="10" rx="5" />
+                      <rect class="art-meter-tick" x="104" y="-4" width="3" height="18" rx="1" />
+                    </g>
+                  </svg>
+                </figure>
+                <h3 class="step-title"><span class="step-num">2</span>Measure the movement</h3>
+                <p>
+                  Ten times a second, each box is shrunk to the same small
+                  square and compared with the last look: the share of the
+                  player that changed is the score. Standing close to the
+                  camera doesn't make you look guiltier.
+                </p>
+              </li>
+
+              <li class="step">
+                <figure class="step-art" data-art="call" aria-hidden="true">
+                  <svg viewBox="0 0 320 200">
+                    <rect class="art-red-zone" x="132" y="18" width="172" height="142" />
+                    <rect class="art-grace" x="132" y="18" width="40" height="142" />
+                    <text class="art-zone-label" x="140" y="36">red light</text>
+                    <line class="art-axis" x1="18" y1="160" x2="304" y2="160" />
+                    <line class="art-cutoff" x1="18" y1="96" x2="304" y2="96" />
+                    <text class="art-cutoff-label" x="22" y="90">the line</text>
+                    <polyline class="art-trace" points="18,70 40,58 62,76 84,52 106,66 128,60 150,72 172,64 194,70 216,62 238,74 260,66" />
+                    <g class="art-checks">
+                      <g style="--i: 0"><circle cx="194" cy="70" r="9" /><text x="194" y="74" text-anchor="middle">1</text></g>
+                      <g style="--i: 1"><circle cx="216" cy="62" r="9" /><text x="216" y="66" text-anchor="middle">2</text></g>
+                      <g style="--i: 2"><circle cx="238" cy="74" r="9" /><text x="238" y="78" text-anchor="middle">3</text></g>
+                    </g>
+                    <g class="art-out">
+                      <rect x="226" y="112" width="74" height="34" rx="5" />
+                      <text x="263" y="137" text-anchor="middle">OUT</text>
+                    </g>
+                  </svg>
+                </figure>
+                <h3 class="step-title"><span class="step-num">3</span>Call it on red</h3>
+                <p>
+                  When the light turns red you get a moment to stop. After
+                  that, anyone whose score stays over the line for three
+                  checks in a row is out. The countdown measures your camera
+                  first, so breathing and camera noise stay under it.
+                </p>
+              </li>
+            </ol>
+
+            <p class="privacy-note">
+              <svg class="icon" aria-hidden="true"><use href="#i-lock" /></svg>
+              <span>
+                Everything happens in this tab. The pose model downloads once,
+                when you press Play; your camera picture is never uploaded,
+                recorded or kept.
+              </span>
+            </p>
           </div>
         </section>
 
-        <!-- --------------------------------------------------- engine --->
-        <section id="engine" aria-labelledby="engineTitle">
-          <p class="eyebrow">Get the engine</p>
-          <h2 id="engineTitle">Run it on your own footage</h2>
+        <!-- ---------------------------------------------------- accuracy --->
+        <section class="band band-accuracy" id="accuracy" aria-labelledby="accuracyTitle">
+          <div class="wrap">
+            <h2 class="section-title" id="accuracyTitle">Checked on real footage</h2>
+            <p class="section-lede">
+              The scoring this page uses was run over a public video of people
+              walking through a courtyard, and over the same players held
+              perfectly still with camera grain added.
+            </p>
 
-          <div class="split">
-            <div class="panel stack">
-              <p class="note" style="margin: 0">
-                The browser arena is one half. The other is a Python package
-                that runs the same rules over a webcam or a video file, with
-                YOLO11n or weights-free HOG detection, and writes the benchmark
-                every number on this page comes from.
+            <div class="proof">
+              <div class="proof-main">
+                <div class="tallies">
+                  <figure class="tally-fig">
+                    <p class="tally-num"><strong id="caughtCount">&mdash;</strong> of <span id="movingCount">&mdash;</span></p>
+                    <figcaption class="tally-cap">moments when someone moved were caught</figcaption>
+                    <div class="dots" id="dotsMoving" role="img"></div>
+                  </figure>
+                  <figure class="tally-fig">
+                    <p class="tally-num"><strong id="falseCount">&mdash;</strong> of <span id="stillCount">&mdash;</span></p>
+                    <figcaption class="tally-cap">moments of a player standing still were called out</figcaption>
+                    <div class="dots" id="dotsStill" role="img"></div>
+                  </figure>
+                </div>
+                <p class="proof-note">
+                  One camera, in daylight, watching people who were walking
+                  rather than trying to keep still, so read this as the easy
+                  case. Every number is reproducible with one command.
+                </p>
+              </div>
+
+              <div class="proof-side">
+                <aside class="parity">
+                  <h3>The same referee in Python and in your browser</h3>
+                  <p>
+                    The scoring code in this tab is checked against the Python
+                    engine on <span id="fixtureCount">24</span> tricky cases:
+                    still frames, camera grain, pixels exactly on the cutoff.
+                    It has to produce the identical number, not a close one.
+                  </p>
+                  <p><a class="text-link" href="?selftest=1">Run that check in this browser</a></p>
+                </aside>
+                <div class="proof-more">
+                  <p>
+                    How the line was chosen, three designs that failed, and
+                    every benchmark number behind this page.
+                  </p>
+                  <a class="btn btn-outline" href="#measurements" data-route="measurements">See every measurement</a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- ======================================== the measurements view === -->
+      <div class="view" id="measurements" data-view="measurements" hidden>
+        <section class="band band-top" id="measurementsIntro" aria-labelledby="measurementsTitle">
+          <div class="wrap">
+            <a class="back-link" href="#arena" data-route="home">
+              <svg class="icon" aria-hidden="true"><use href="#i-back" /></svg>
+              Back to the game
+            </a>
+            <h2 class="page-title" id="measurementsTitle" tabindex="-1" aria-level="1">Measurements</h2>
+            <p class="section-lede">
+              How the referee was tuned and tested: the cutoff, the three
+              designs that looked fine until they were measured, and every
+              benchmark number, all from one reproducible run of
+              <code>redlight benchmark</code>.
+            </p>
+            <nav class="toc" aria-label="On this page">
+              <a href="#lab">Move the cutoff</a>
+              <a href="#naive">The obvious designs</a>
+              <a href="#results">Benchmark</a>
+              <a href="#engine">Run it yourself</a>
+            </nav>
+          </div>
+        </section>
+
+        <!-- ---------------------------------------------------------- lab --->
+        <section class="band" id="lab" aria-labelledby="labTitle">
+          <div class="wrap">
+            <h2 class="section-title" id="labTitle">Move the cutoff, watch the calls</h2>
+            <p class="section-lede">
+              Eight real players from one red light in the benchmark footage:
+              five who were moving and three who were frozen. Drag the line.
+              Every verdict is recomputed through the same judge the game
+              uses, with the same three-in-a-row rule.
+            </p>
+
+            <div class="lab-grid">
+              <div class="plot-frame" id="labPlot"></div>
+
+              <div class="lab-side">
+                <div class="card">
+                  <p class="card-label">At this cutoff</p>
+                  <p class="big-read" id="labHeadline"></p>
+                  <label for="labSlider" class="card-label">Cutoff, share of the body per second</label>
+                  <input type="range" id="labSlider" aria-describedby="labBand" />
+                  <p class="note" id="labBand"></p>
+                  <button class="btn btn-small" id="labReset" type="button">Back to the measured cutoff</button>
+                </div>
+
+                <div class="card">
+                  <p class="card-label">Verdicts</p>
+                  <div class="tally" id="labTally"></div>
+                </div>
+              </div>
+            </div>
+
+            <p class="note wide-note">
+              These are the flow scores the Python engine records, in the same
+              units as its cutoff. The dotted line is the cutoff the benchmark
+              chose: halfway between the 99th percentile of the frozen samples
+              and the 1st percentile of the moving ones. The shaded band is
+              every cutoff that gives the same eight verdicts, found by running
+              the judge itself rather than by assuming the choice is robust.
+            </p>
+          </div>
+        </section>
+
+        <!-- -------------------------------------------------------- naive --->
+        <section class="band" id="naive" aria-labelledby="naiveTitle">
+          <div class="wrap">
+            <h2 class="section-title" id="naiveTitle">Three referees that look fine until you measure them</h2>
+            <p class="section-lede">
+              Each is a reasonable first idea, and each was built and scored
+              against the same ground truth as the referee that shipped.
+            </p>
+
+            <div class="control-row">
+              <span class="control-label" id="scaleLabel">Apparent player size</span>
+              <div class="segmented segmented-light" id="scaleControl" role="group" aria-labelledby="scaleLabel">
+                <button type="button" data-scale="0.5x" aria-pressed="false">Half size</button>
+                <button type="button" data-scale="1x" aria-pressed="true">As measured</button>
+                <button type="button" data-scale="1.667x" aria-pressed="false">1.7&times; closer</button>
+              </div>
+            </div>
+
+            <div class="exhibits">
+              <article class="exhibit">
+                <div>
+                  <h3>Watch the brightness</h3>
+                  <p>
+                    Sum the pixels in the player's box and call any change
+                    movement. It needs no model and no motion estimate at all,
+                    and what it actually tracks is how many pixels the player
+                    covers: shrink them and it never fires, bring them closer
+                    and it fires on everybody. It flags frozen and moving
+                    players at the same rate, which is another way of saying
+                    it is a coin flip.
+                  </p>
+                </div>
+                <div class="readout-grid">
+                  <div class="readout" id="bxFrozen">
+                    <span class="k">Frozen flagged</span>
+                    <span class="v">&mdash;</span>
+                  </div>
+                  <div class="readout" id="bxMoving">
+                    <span class="k">Moving flagged</span>
+                    <span class="v">&mdash;</span>
+                  </div>
+                  <div class="readout readout-wide">
+                    <span class="k">Area under the ROC curve (0.5000 is a coin flip)</span>
+                    <span class="v" id="bxAuc">&mdash;</span>
+                  </div>
+                </div>
+              </article>
+
+              <article class="exhibit">
+                <div>
+                  <h3>Difference the whole frame</h3>
+                  <p>
+                    Subtract this frame from the last one and count the pixels
+                    that changed. On an empty room it works. Put one frozen
+                    player in a street scene and everybody walking past is
+                    charged to them: the whole-frame score crosses its cutoff
+                    within a second and stays there for half the run, while
+                    the same player scored inside their own box reads exactly
+                    zero.
+                  </p>
+                  <div class="barline" id="bgBars"></div>
+                </div>
+                <div class="readout-grid">
+                  <div class="readout" id="bgFirst" data-flavour="bad">
+                    <span class="k">First false call</span>
+                    <span class="v">&mdash;</span>
+                  </div>
+                  <div class="readout" id="bgPerBox" data-flavour="good">
+                    <span class="k">Same player, per box</span>
+                    <span class="v">&mdash;</span>
+                  </div>
+                </div>
+              </article>
+
+              <article class="exhibit">
+                <div>
+                  <h3>Measure flow in raw pixels</h3>
+                  <p>
+                    Estimate optical flow inside the box and threshold the raw
+                    pixel speed. This one is nearly right, and it fails
+                    quietly: pixels per second is not a property of the
+                    player, it is a property of how many pixels the player
+                    happens to cover. Dividing the flow by the box size before
+                    thresholding is the whole fix.
+                  </p>
+                  <p class="note" id="rawSpread"></p>
+                </div>
+                <div class="readout-grid">
+                  <div class="readout" id="rawMoving">
+                    <span class="k">Raw flow, moving caught</span>
+                    <span class="v">&mdash;</span>
+                  </div>
+                  <div class="readout" id="normMoving">
+                    <span class="k">Per box, moving caught</span>
+                    <span class="v">&mdash;</span>
+                  </div>
+                  <div class="readout readout-wide" id="diffMoving">
+                    <span class="k">Per-box difference, the score this page uses</span>
+                    <span class="v">&mdash;</span>
+                  </div>
+                </div>
+              </article>
+            </div>
+
+            <div class="limitation">
+              <p class="limitation-title">Where cropping stops helping</p>
+              <p id="bgLimitation"></p>
+            </div>
+          </div>
+        </section>
+
+        <!-- ------------------------------------------------------ results --->
+        <section class="band" id="results" aria-labelledby="resultsTitle">
+          <div class="wrap">
+            <h2 class="section-title" id="resultsTitle">What the benchmark says</h2>
+            <p class="section-lede">
+              One pass over the same footage, with every design scored on the
+              same samples. Ground truth comes from the tracker: a player whose
+              box centre moved is moving; a frozen crop with camera grain added
+              on top is frozen.
+            </p>
+
+            <div class="chart-grid">
+              <div class="chart-card">
+                <h3>Five referee designs, same samples</h3>
+                <p class="note">
+                  Catches against false alarms. A design is only useful when
+                  the first bar is long and the second is not there at all.
+                </p>
+                <div class="chart-frame tall">
+                  <canvas id="chartClassifiers"></canvas>
+                </div>
+                <p class="chart-missing">
+                  The chart library did not load. The same numbers are in the
+                  table below.
+                </p>
+                <p class="legend-row" id="legendClassifiers"></p>
+                <details class="table-view">
+                  <summary>Table view</summary>
+                  <table id="tableClassifiers"></table>
+                </details>
+              </div>
+
+              <div class="chart-card">
+                <h3>The same players, three apparent sizes</h3>
+                <p class="note">
+                  How many moving players each design catches when the footage
+                  is rescaled. A design that changes its mind here changes its
+                  mind about how far away you are standing.
+                </p>
+                <div class="chart-frame tall">
+                  <canvas id="chartResolution"></canvas>
+                </div>
+                <p class="chart-missing">
+                  The chart library did not load. The same numbers are in the
+                  table below.
+                </p>
+                <p class="legend-row" id="legendResolution"></p>
+                <details class="table-view">
+                  <summary>Table view</summary>
+                  <table id="tableResolution"></table>
+                </details>
+              </div>
+
+              <div class="chart-card">
+                <h3>Finding people costs real time</h3>
+                <p class="note">
+                  Milliseconds per frame on the benchmark machine, single
+                  threaded. HOG is the weights-free option: no model file to
+                  fetch, and it pays for that in time.
+                </p>
+                <div class="chart-frame short">
+                  <canvas id="chartDetector"></canvas>
+                </div>
+                <p class="chart-missing" id="missingDetector">The chart library did not load.</p>
+              </div>
+
+              <div class="chart-card">
+                <h3>Judging them costs almost nothing</h3>
+                <p class="note">
+                  Milliseconds per player per sample. The difference score is
+                  what this browser runs, because dense optical flow is not
+                  affordable in a tab.
+                </p>
+                <div class="chart-frame short">
+                  <canvas id="chartScoring"></canvas>
+                </div>
+                <p class="chart-missing" id="missingScoring">The chart library did not load.</p>
+              </div>
+            </div>
+
+            <div class="chart-card chart-card-wide">
+              <h3>Frame rate changes nothing</h3>
+              <p class="note">
+                The same footage played at 10 and at 30 frames per second,
+                judged on the same fixed 0.1 s clock. This is the payoff for
+                holding the interval instead of rescaling the score.
               </p>
-              <pre><code>git clone https://github.com/safdar-hussain1/red-light-green-light-cv.git
+              <dl class="stat-row" id="fpsStats"></dl>
+              <p class="note" id="benchMeta"></p>
+            </div>
+          </div>
+        </section>
+
+        <!-- ------------------------------------------------------- engine --->
+        <section class="band" id="engine" aria-labelledby="engineTitle">
+          <div class="wrap">
+            <h2 class="section-title" id="engineTitle">Run it on your own footage</h2>
+
+            <div class="split">
+              <div class="card">
+                <p>
+                  The browser game is one half. The other is a Python package
+                  that runs the same rules over a webcam or a video file, with
+                  YOLO11n or weights-free HOG detection, and writes the
+                  benchmark every number here comes from.
+                </p>
+                <pre tabindex="0" role="region" aria-label="Commands to install and run the engine"><code>git clone https://github.com/safdar-hussain1/red-light-green-light-cv.git
 cd red-light-green-light-cv
-python3 -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv &amp;&amp; source .venv/bin/activate
 pip install -e ".[audio,analysis,dev]"
 
 # play against your webcam
@@ -754,43 +854,47 @@ redlight play --source 0
 # referee the included footage, headless, and report
 redlight play --source data/vtest.avi --headless --auto-start 10
 
-# reproduce every number on this page, into a scratch file
+# reproduce every number here, into a scratch file
 # (exact on the package versions the README pins)
 redlight benchmark --out /tmp/bench.json
 
 # build this page from the results
 redlight build-site</code></pre>
-            </div>
+              </div>
 
-            <div class="panel stack">
-              <h3>What is in the box</h3>
-              <p class="note">
-                Detection, an IoU tracker with stable ids, the motion judge, the
-                game state machine, a HUD, a synthesised chant, the benchmark
-                harness, and this page's build. Tests cover all of it, including
-                the parity suite that holds the browser judge to the Python one.
-              </p>
-              <p class="note">
-                <a href="https://github.com/safdar-hussain1/red-light-green-light-cv"
-                  >Source, tests and benchmark on GitHub</a
-                >
-                · MIT licensed · <a href="?selftest=1">run the fixture selftest</a>
-              </p>
+              <div class="card">
+                <h3>What is in the box</h3>
+                <p>
+                  Detection, a tracker that keeps ids stable, the motion
+                  judge, the game rules, a HUD, a synthesised chant, the
+                  benchmark harness and this page's build. Tests cover all of
+                  it, including the parity suite that holds the browser judge
+                  to the Python one.
+                </p>
+                <p>
+                  <a class="text-link" href="https://github.com/safdar-hussain1/red-light-green-light-cv">Source, tests and benchmark on GitHub</a>
+                </p>
+                <p>
+                  <a class="text-link" href="?selftest=1">Run the fixture selftest in this browser</a>
+                </p>
+              </div>
             </div>
           </div>
         </section>
-      </main>
+      </div>
+    </main>
 
-      <footer>
+    <footer>
+      <div class="wrap footer-inner">
         <p>Built by <a href="https://github.com/safdar-hussain1">Safdar Hussain</a>.</p>
-        <p>
-          <a href="https://github.com/safdar-hussain1/red-light-green-light-cv"
-            >Source and benchmarks on GitHub</a
-          >
+        <p><a href="https://github.com/safdar-hussain1/red-light-green-light-cv">Source and benchmarks on GitHub</a>, MIT licensed.</p>
+        <p class="footer-fine">
+          Set in Black Han Sans and IBM Plex Sans KR, both under the SIL Open
+          Font License 1.1. The recorded match is an OpenCV sample video,
+          BSD licensed.
         </p>
-        <p>MIT licensed.</p>
-      </footer>
-    </div>
+      </div>
+    </footer>
 
     <!--__SCRIPTS__-->
 
@@ -990,8 +1094,27 @@ redlight build-site</code></pre>
               ? "SELFTEST PASS n=" + checks
               : "SELFTEST FAIL " + failures.length + " of " + checks +
                 ": " + failures.slice(0, 3).join(" | ");
+          announce(
+            failures.length === 0,
+            failures.length === 0
+              ? "Selftest passed: all " + checks + " checks, including every one of the " +
+                fixtures.cases.length + " scoring cases, which match the Python engine exactly."
+              : "Selftest failed " + failures.length + " of " + checks + " checks: " +
+                failures.slice(0, 3).join("; ") + "."
+          );
         } catch (err) {
           document.title = "SELFTEST FAIL threw: " + (err && err.message ? err.message : err);
+          announce(false, "Selftest could not finish: " + (err && err.message ? err.message : err));
+        }
+
+        // The title is what a headless browser reads; a person reads this.
+        function announce(passed, text) {
+          var banner = document.createElement("p");
+          banner.className = "selftest-banner";
+          banner.dataset.passed = passed ? "true" : "false";
+          banner.setAttribute("role", "status");
+          banner.textContent = text;
+          document.body.appendChild(banner);
         }
       })();
     </script>

@@ -2,7 +2,7 @@
 """Drive the published arena in a real browser and report what it did.
 
 The unit tests hold the judge, the game and the build. None of them opens
-the page. This does: it runs `docs/index.html` in headless Chrome three
+the page. This does: it runs `docs/index.html` in headless Chrome four
 different ways, and every one of them ends in an assertion rather than a
 screenshot somebody is supposed to squint at.
 
@@ -30,6 +30,13 @@ wobbling box slides across a stationary body, which reads as movement. The
 run asserts both halves of the referee: the walker is called out, and the
 still one survives two whole red lights.
 
+**The demo match.** The page opens on a match between drawn players,
+refereed by the same code as a camera match, and its outcome is a claim the
+page makes: of the four players, the one who keeps walking into a red light
+and the one who cannot keep still are called out, and the two who stop in
+time are not. `?action=demo` lets that match play under the probe and the
+run asserts exactly that, ending in a victory.
+
 Getting a `--dump-dom` to happen *late* takes a trick, because the dump
 fires on the load event and `--virtual-time-budget` — the usual way to wait
 — freezes media, which is exactly what this run needs running. So the
@@ -38,7 +45,7 @@ The load event waits for it, the match plays out underneath, and the dump
 lands after the arena has reached a green light.
 
 **Screenshots.** Both themes, desktop and phone, plus the arena mid-match
-and each section on its own. Headless Chrome renders dark by default, so
+and each section on its own, including the ones on the measurements view. Headless Chrome renders dark by default, so
 light is stamped explicitly rather than assumed — `?theme=` is honoured by
 the page's own head script.
 
@@ -109,6 +116,10 @@ between a player who is holding still and a player who has not been armed
 against yet. The stub pins both ends of the phase length at 1.5 s, so the
 second red light closes at about 10.3 s and this leaves the margin.
 """
+
+DEMO_HOLD_MS = 19000
+"""The same hold for the demo match, which needs about 16.5 s to finish: a
+second to register its players, a 1.5 s countdown, then 14 s of lights."""
 
 # A 1x1 transparent GIF. The response body has to be a real image or Chrome
 # gives up on it early and the load event stops waiting.
@@ -262,6 +273,8 @@ INJECTION = """
     }
 
     var action = new URLSearchParams(window.location.search).get("action");
+    // The demo match starts itself; there is nothing to click.
+    if (action === "demo") return;
     window.setTimeout(function () {
       var target =
         action === "replay"
@@ -403,7 +416,7 @@ it. Copying these alongside the stub keeps that path honest.
 """
 
 
-def stubbed_page(destination: Path) -> None:
+def stubbed_page(destination: Path, hold_ms: int = HOLD_MS) -> None:
     """Write a copy of the built page with the verification stubs injected.
 
     The stubs go into the head, ahead of everything the arena defines, and
@@ -416,7 +429,7 @@ def stubbed_page(destination: Path) -> None:
     """
     html = PAGE.read_text(encoding="utf-8")
     html = html.replace("</head>", INJECTION + "</head>", 1)
-    html = html.replace("</body>", HOLD_MARKUP.format(ms=HOLD_MS) + "</body>", 1)
+    html = html.replace("</body>", HOLD_MARKUP.format(ms=hold_ms) + "</body>", 1)
     destination.write_text(html, encoding="utf-8")
     for name in SIDECAR_ASSETS:
         source = PAGE.parent / name
@@ -524,7 +537,33 @@ def check_play_path(report: list, shots: bool) -> bool:
             httpd.server_close()
 
 
-SECTIONS = ("arena", "pipeline", "lab", "naive", "results", "engine")
+def check_demo(report: list) -> bool:
+    """The demo match calls out exactly the two players written to move.
+
+    Players 2 and 4 are drawn to move on a red light — one walks past the
+    grace, one fidgets after stopping — and players 1 and 3 stop inside the
+    grace and hold. The referee is not told any of that; it has to work it
+    out from the pixels, the same way it does from a camera.
+    """
+    with tempfile.TemporaryDirectory(prefix="rl-demo-") as tmp:
+        root = Path(tmp)
+        stubbed_page(root / "index.html", hold_ms=DEMO_HOLD_MS)
+        httpd, port = serve(root)
+        try:
+            url = f"http://127.0.0.1:{port}/index.html?probe=1&action=demo&theme=dark"
+            title = dump_title(url, ("--window-size=1400,1600",))
+        finally:
+            httpd.shutdown()
+            httpd.server_close()
+
+    phases = title.replace("PROBE ", "").split(">")
+    calls = sorted(p for p in phases if p.startswith("out:"))
+    ok = "demo" in phases and calls == ["out:2", "out:4"] and "end:VICTORY" in phases
+    report.append(("demo match calls the two movers only", ok, title or "no title"))
+    return ok
+
+
+SECTIONS = ("arena", "how", "accuracy", "lab", "naive", "results", "engine")
 
 SOLO_STYLE = """
 <style>
@@ -533,9 +572,11 @@ SOLO_STYLE = """
    Scrolling is not an option — `--screenshot` rasterises the viewport and
    then places it at the document origin, so a scrolled page photographs as a
    blank band where the content above should be. Hiding everything else puts
-   the section under review at the top with nothing to scroll past. */
-.brandbar, .masthead, footer, main > section:not(#SECTION) { display: none !important; }
-main > section { padding-top: 1.2rem !important; }
+   the section under review at the top with nothing to scroll past, and the
+   measurements view is shown too, so its sections can be photographed. */
+.topbar, footer, .view > section:not(#SECTION) { display: none !important; }
+.view[hidden] { display: block !important; }
+.view > section { padding-top: 1.2rem !important; }
 </style>
 """
 
@@ -605,6 +646,7 @@ def main() -> int:
 
     if not args.shots_only:
         ok &= check_selftest(report)
+        ok &= check_demo(report)
         ok &= check_play_path(report, shots=not args.no_shots)
     if not args.no_shots:
         ok &= take_screenshots(report)

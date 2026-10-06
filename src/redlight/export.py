@@ -20,10 +20,10 @@ windows through canvas instead. So the honest claim is identical scoring of
 identical windows, not identical verdicts from an identical camera frame.
 
 `build_site` collapses the arena into a single HTML file: the page shell,
-every stylesheet and script from `site/`, and one `window.RL_DATA` blob
-carrying the engine's constants, the published benchmark results, the chant,
-and those same golden fixtures. One file, no build step, no server — drop it
-on a static host and it works. The fixtures ride along so the shipped page
+every stylesheet and script from `site/`, the typefaces in `site/fonts/` as
+data URIs, and one `window.RL_DATA` blob carrying the engine's constants,
+the published benchmark results, the chant, and those same golden fixtures.
+One file, no build step, no server — drop it on a static host and it works. The fixtures ride along so the shipped page
 can re-run that scoring-kernel comparison in the visitor's own browser via
 `?selftest=1`, in whatever engine actually loaded it.
 
@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 from pathlib import Path
 
 import numpy as np
@@ -61,6 +62,11 @@ not named here is appended afterward in sorted order — so a new script can
 be added to the arena without touching this module, and only a script with a
 real load-order dependency needs to be listed.
 """
+
+FONTS_DIR = SITE_DIR / "fonts"
+
+FONT_URL = re.compile(r"""url\(\s*["']?fonts/([A-Za-z0-9._-]+\.woff2)["']?\s*\)""")
+"""A stylesheet's reference to one of the files in `site/fonts/`."""
 
 STYLES_MARKER = "<!--__STYLES__-->"
 SCRIPTS_MARKER = "<!--__SCRIPTS__-->"
@@ -359,10 +365,36 @@ def _check_no_closing_tag(source: str, path: Path, tag: str) -> None:
         )
 
 
+def _inline_fonts(css: str, path: Path) -> str:
+    """Swap every `url(fonts/NAME.woff2)` in a stylesheet for the file itself.
+
+    The page is one file, so a typeface cannot sit beside it as a request of
+    its own; it rides along as a base64 data URI instead. The fonts are Latin
+    subsets under 20 KB each, which is what makes that affordable.
+
+    Raises:
+        FileNotFoundError: If the stylesheet names a font that is not in
+            `site/fonts/`. A missing face would otherwise fall back to a
+            system font silently, and the page would look wrong with nothing
+            saying why.
+    """
+
+    def embed(match: re.Match) -> str:
+        font = FONTS_DIR / match.group(1)
+        if not font.is_file():
+            raise FileNotFoundError(
+                f"{path.name} refers to fonts/{match.group(1)}, which is not in {FONTS_DIR}"
+            )
+        payload = base64.b64encode(font.read_bytes()).decode("ascii")
+        return f'url("data:font/woff2;base64,{payload}")'
+
+    return FONT_URL.sub(embed, css)
+
+
 def _inline_styles() -> str:
     blocks = []
     for path in sorted(SITE_DIR.glob("*.css")):
-        source = path.read_text(encoding="utf-8")
+        source = _inline_fonts(path.read_text(encoding="utf-8"), path)
         _check_no_closing_tag(source, path, "style")
         blocks.append(f"<style>\n/* {path.name} */\n{source}</style>")
     return "\n".join(blocks)
@@ -443,10 +475,11 @@ def build_site(out: str | Path = DEFAULT_SITE_OUT) -> str:
     """Build the arena into one self-contained HTML file.
 
     Reads `site/template.html`, inlines every stylesheet and script from
-    `site/`, and bakes the engine's constants, the benchmark results, the
-    chant, and the golden judge fixtures into `window.RL_DATA`. The result
-    needs no server, no build step, and no network beyond the two pinned CDN
-    entries the template documents.
+    `site/` (with the typefaces in `site/fonts/` as data URIs), and bakes
+    the engine's constants, the benchmark results, the chant, and the golden
+    judge fixtures into `window.RL_DATA`. The result needs no server, no
+    build step, and no network beyond the two pinned CDN entries the
+    template documents.
 
     The output is byte-reproducible: given the same sources it produces the
     same file every time, so the committed `docs/index.html` only changes

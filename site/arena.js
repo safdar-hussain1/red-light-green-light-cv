@@ -1,15 +1,24 @@
 /**
- * The playable arena: camera in, verdicts out.
+ * The playable arena: a frame in, verdicts out.
  *
  * This file is the wiring, not the rules. The rules live in `judge.js` (the
  * scoring kernel, pinned to Python by golden fixtures) and `game.js` (the
  * phase machine, pinned by the same parity suite). What happens here is the
- * part a browser has to do for itself: open a camera, find the players, cut
+ * part a browser has to do for itself: get a frame, find the players, cut
  * their boxes into 96x96 windows, pace those windows onto the referee's
  * fixed 0.1 s clock, and turn the events that come back into something a
  * person can read while standing still in front of a laptop.
  *
- * Three details are worth knowing before changing anything.
+ * One stage shows three things, and only one at a time:
+ *
+ * - **The demo match** (`demo.js`), which opens the page: drawn players on a
+ *   canvas, refereed by everything below exactly as a camera match is. It
+ *   pauses whenever the stage is off screen.
+ * - **Your camera**, after Play: the webcam, the pose model, the real match.
+ * - **The recorded match**: the Python engine's own annotated footage, with
+ *   the light, the doll, the timer and the players kept in step with it.
+ *
+ * A few details are worth knowing before changing anything.
  *
  * **One sampler, not one per player.** The referee's clock is a property of
  * the match, not of a person: every player is compared across the same slice
@@ -28,9 +37,8 @@
  *
  * **The window a player is scored through is not the box drawn around them.**
  * `BoxStabilizer` smooths it, and pins it still for the countdown and every
- * red light, so detector wobble cannot be mistaken for a player moving. That
- * mistake is what this arena shipped with, and `site/pose.js` explains the
- * mechanism at length.
+ * red light, so detector wobble cannot be mistaken for a player moving.
+ * `site/pose.js` explains the mechanism at length.
  */
 
 /**
@@ -50,6 +58,13 @@ const DIFFICULTY = Object.freeze({
   ruthless: 1.0,
 });
 
+/** What each difficulty means, in the words a player needs. */
+const DIFFICULTY_NOTES = Object.freeze({
+  forgiving: "Forgiving: small fidgets are allowed.",
+  standard: "Standard: leaves room for breathing and camera noise.",
+  ruthless: "Ruthless: the strictest line, measured on the benchmark footage.",
+});
+
 /** Headroom over the noise floor measured on the player's own camera. */
 const CAL_MARGIN = 3.0;
 
@@ -65,8 +80,24 @@ const TRACE_MEMORY = 40;
 /** Meter full-scale, as a multiple of the live threshold. */
 const METER_SCALE = 2.0;
 
-/** Circumference of the countdown ring's circle (r = 54). */
-const RING_CIRCUMFERENCE = 2 * Math.PI * 54;
+/**
+ * The demo match's schedule: a short match, so a visitor sees a whole one,
+ * calls and result included, in about twenty seconds. The seed fixes the
+ * lengths of the lights, so the demo plays the same way on every visit.
+ */
+const DEMO_MATCH = Object.freeze({
+  seed: 11,
+  countdownS: 1.5,
+  durationS: 14.0,
+  phaseMinS: 1.7,
+  phaseMaxS: 2.6,
+});
+
+/** How long the demo's result stays up before the next demo match starts. */
+const DEMO_RESTART_MS = 5200;
+
+/** How long the card explaining a call stays up. */
+const WHY_CARD_MS = 3800;
 
 /**
  * When each light started in the recorded demo match, in match seconds.
@@ -103,9 +134,9 @@ const FREEZE_MS = 260;
  * True when the visitor has asked the platform for less movement.
  *
  * The stylesheet flattens every transition and animation on its own. This is
- * for the handful of effects CSS cannot reason about — a full-frame white
- * flash, a burst of thrown paper, a box breaking into shards — which are not
- * worth flattening, only worth skipping.
+ * for the effects CSS cannot reason about — a demo match that plays by
+ * itself, a full-frame flash, a burst of thrown paper, a box breaking into
+ * shards — which are not worth flattening, only worth skipping.
  */
 function lessMotion() {
   return (
@@ -127,22 +158,19 @@ function initTheme() {
   const button = document.getElementById("themeToggle");
   if (!button) return;
 
-  function label() {
-    const dark = document.documentElement.dataset.theme
+  const isDark = () =>
+    document.documentElement.dataset.theme
       ? document.documentElement.dataset.theme === "dark"
       : window.matchMedia("(prefers-color-scheme: dark)").matches;
-    button.textContent = dark ? "Day game" : "Night game";
-    button.setAttribute(
-      "aria-label",
-      dark ? "Switch to the light theme" : "Switch to the dark theme"
-    );
+
+  function label() {
+    const text = isDark() ? "Switch to the light theme" : "Switch to the dark theme";
+    button.setAttribute("aria-label", text);
+    button.title = text;
   }
 
   button.addEventListener("click", () => {
-    const dark = document.documentElement.dataset.theme
-      ? document.documentElement.dataset.theme === "dark"
-      : window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const next = dark ? "light" : "dark";
+    const next = isDark() ? "light" : "dark";
     document.documentElement.dataset.theme = next;
     try {
       window.localStorage.setItem("rl-theme", next);
@@ -157,68 +185,37 @@ function initTheme() {
   label();
 }
 
-/* --------------------------------------------------------------- the hero */
+/* -------------------------------------------------------------- the light */
+
+/** What the panel says for each phase: the light, and what it asks of you. */
+const LIGHT_WORDS = Object.freeze({
+  LOBBY: ["Lobby", "Waiting for players"],
+  COUNTDOWN: ["Get ready", "Stand still"],
+  GREEN: ["Green light", "Move"],
+  RED: ["Red light", "Freeze"],
+  VICTORY: ["Victory", "The clock ran out"],
+  WIPEOUT: ["Wipeout", "Nobody left standing"],
+});
 
 /**
- * The title plays the game with you.
- *
- * The hero doll turns on her own slow schedule and the two words of the
- * title light up with her, so the mechanic is legible before anyone has
- * clicked anything or granted anything.
- *
- * Once a real match starts she stops improvising and follows it. Two dolls
- * on one page disagreeing about the light would be worse than one doll, and
- * a title that says "red light" over a green arena is a bug a reader can
- * see.
+ * Show one light everywhere it appears: the sign in the headline, the small
+ * lamp in the top bar, and the big lamp behind the doll. Three places, one
+ * light — a sign saying "red light" over a green stage would be a bug a
+ * reader could see.
  */
-function initHeroDemo() {
-  const mount = document.getElementById("heroDoll");
-  const masthead = document.querySelector(".masthead");
-  if (!mount || !window.createDoll) return null;
-
-  const doll = createDoll(mount);
-  const caption = document.getElementById("heroDollCaption");
-  let phase = "GREEN";
-  let timer = null;
-
-  const CAPTIONS = {
-    GREEN: "Green light — go",
-    RED: "Red light — hold still",
-    COUNTDOWN: "Countdown — get ready",
-    LOBBY: "Waiting for players",
-    VICTORY: "The clock ran out",
-    WIPEOUT: "Nobody left standing",
-  };
-
-  function show(next) {
-    phase = next;
-    doll.setPhase(phase);
-    doll.setArmed(phase === "RED");
-    if (masthead) masthead.dataset.demo = phase === "GREEN" ? "GREEN" : "RED";
-    if (caption) caption.textContent = CAPTIONS[phase] || CAPTIONS.LOBBY;
+function showLight(phase) {
+  const sign = document.getElementById("sign");
+  if (sign) {
+    sign.dataset.lit =
+      phase === "GREEN" || phase === "VICTORY"
+        ? "green"
+        : phase === "RED" || phase === "WIPEOUT"
+          ? "red"
+          : "none";
   }
-
-  function tick() {
-    show(phase === "GREEN" ? "RED" : "GREEN");
-    timer = window.setTimeout(tick, phase === "GREEN" ? 2600 : 2200);
+  for (const lamp of document.querySelectorAll(".brand-lamp, #lamp")) {
+    lamp.dataset.phase = phase;
   }
-
-  tick();
-  return {
-    /** Hand the doll over to a live match. */
-    follow(livePhase) {
-      if (timer !== null) {
-        window.clearTimeout(timer);
-        timer = null;
-      }
-      show(livePhase);
-    },
-    /** Take the doll back when the match is over. */
-    resume() {
-      if (timer !== null) return;
-      tick();
-    },
-  };
 }
 
 /* -------------------------------------------------------------- utilities */
@@ -229,6 +226,11 @@ function el(id) {
 
 function fmt(value, digits = 2) {
   return Number(value).toFixed(digits);
+}
+
+/** A player's number as it is printed on their patch: 1 is "001". */
+function bib(trackId) {
+  return String(trackId).padStart(3, "0");
 }
 
 /**
@@ -256,7 +258,7 @@ function percentile(values, q) {
  */
 function sparkline(samples, threshold) {
   const width = 240;
-  const height = 44;
+  const height = 40;
   if (samples.length < 2) return "";
 
   const top = Math.max(threshold * 1.6, ...samples) || 1;
@@ -273,11 +275,109 @@ function sparkline(samples, threshold) {
   return [
     '<svg viewBox="0 0 ' + width + " " + height + '" preserveAspectRatio="none" aria-hidden="true">',
     '<line x1="0" y1="' + fmt(thresholdY, 1) + '" x2="' + width + '" y2="' + fmt(thresholdY, 1) +
-      '" stroke="currentColor" stroke-width="1" stroke-dasharray="4 3" opacity="0.55"/>',
+      '" stroke="currentColor" stroke-width="1" stroke-dasharray="4 3"/>',
     '<polyline points="' + points + '" fill="none" stroke="var(--red-lit)" stroke-width="2" ',
     'stroke-linejoin="round" stroke-linecap="round"/>',
     "</svg>",
   ].join("");
+}
+
+/* ------------------------------------------------------------ timer board */
+
+/** Which of the seven segments each character lights. */
+const SEGMENTS = Object.freeze({
+  0: "abcdef",
+  1: "bc",
+  2: "abged",
+  3: "abgcd",
+  4: "fgbc",
+  5: "afgcd",
+  6: "afgedc",
+  7: "abc",
+  8: "abcdefg",
+  9: "abcdfg",
+  "-": "g",
+  " ": "",
+});
+
+/**
+ * The arena's timer board: red seven-segment digits, drawn as SVG.
+ *
+ * Each segment is a six-sided bar, so the unlit ones stay faintly visible
+ * the way a real board's do, and the digits never reflow as they change.
+ */
+class SevenSegment {
+  constructor(mount, digits = 2) {
+    this.mount = mount;
+    this.digits = digits;
+    this.cells = [];
+    if (!mount) return;
+
+    const W = 40;
+    const H = 70;
+    const T = 7;
+    const GAP = 14;
+    const across = (yc) => {
+      const x1 = 5;
+      const x2 = W - 5;
+      return [
+        [x1, yc],
+        [x1 + T / 2, yc - T / 2],
+        [x2 - T / 2, yc - T / 2],
+        [x2, yc],
+        [x2 - T / 2, yc + T / 2],
+        [x1 + T / 2, yc + T / 2],
+      ];
+    };
+    const down = (xc, y1, y2) => [
+      [xc, y1],
+      [xc + T / 2, y1 + T / 2],
+      [xc + T / 2, y2 - T / 2],
+      [xc, y2],
+      [xc - T / 2, y2 - T / 2],
+      [xc - T / 2, y1 + T / 2],
+    ];
+    const shapes = {
+      a: across(T / 2),
+      g: across(H / 2),
+      d: across(H - T / 2),
+      f: down(T / 2, 5, H / 2 - 1.5),
+      b: down(W - T / 2, 5, H / 2 - 1.5),
+      e: down(T / 2, H / 2 + 1.5, H - 5),
+      c: down(W - T / 2, H / 2 + 1.5, H - 5),
+    };
+
+    const total = digits * W + (digits - 1) * GAP;
+    const parts = ['<svg viewBox="-2 -2 ' + (total + 4) + " " + (H + 4) + '">'];
+    for (let i = 0; i < digits; i += 1) {
+      parts.push('<g transform="translate(' + i * (W + GAP) + ' 0) skewX(-6)">');
+      for (const [name, points] of Object.entries(shapes)) {
+        parts.push(
+          '<polygon class="seg" data-seg="' + name + '" points="' +
+            points.map(([x, y]) => x + "," + y).join(" ") + '"/>'
+        );
+      }
+      parts.push("</g>");
+    }
+    parts.push("</svg>");
+    mount.innerHTML = parts.join("");
+    this.cells = Array.from(mount.querySelectorAll("g"));
+    this.shown = null;
+  }
+
+  /** Show up to `digits` characters, right-aligned. */
+  set(text) {
+    if (!this.mount) return;
+    const value = String(text).slice(-this.digits).padStart(this.digits, " ");
+    if (value === this.shown) return;
+    this.shown = value;
+    this.cells.forEach((cell, index) => {
+      const lit = SEGMENTS[value[index]] || "";
+      for (const seg of cell.children) {
+        seg.classList.toggle("on", lit.includes(seg.dataset.seg));
+      }
+    });
+  }
 }
 
 /* ---------------------------------------------------------------- probing */
@@ -285,10 +385,10 @@ function sparkline(samples, threshold) {
 /**
  * A read-out of what the arena did, for a headless browser to assert on.
  *
- * Only active under `?probe=1`. `scripts/verify_site.py` drives the whole
- * play path with a fake camera and reads the result out of the page title,
- * which is the one piece of state a `--dump-dom` run can see without a
- * screenshot or a console scrape.
+ * Only active under `?probe=1`. `scripts/verify_site.py` drives the play
+ * path, the replay and the demo match and reads the result out of the page
+ * title, which is the one piece of state a `--dump-dom` run can see without
+ * a screenshot or a console scrape.
  */
 const Probe = {
   on: new URLSearchParams(window.location.search).get("probe") === "1",
@@ -303,12 +403,32 @@ const Probe = {
 
 /* ------------------------------------------------------------------ arena */
 
+/** What the stage says it is showing, and the line of text under it. */
+const MODE_TEXT = Object.freeze({
+  demo: [
+    "Demo match",
+    "Drawn players walk on green and freeze on red. The boxes, movement " +
+      "meters and calls come from the real referee; only the pose model is skipped.",
+  ],
+  camera: [
+    "Your camera",
+    "Stand back until your whole body is in frame, then play by the light. " +
+      "Up to four players at once.",
+  ],
+  replay: [
+    "Recorded match",
+    "The Python engine refereeing public courtyard footage. Every box, " +
+      "label and call in the video is the engine's own, not staged.",
+  ],
+  idle: ["", ""],
+});
+
 /**
- * Owns the camera, the pose source, the judge, the game, and the HUD.
+ * Owns the stage: the frame source, the pose source, the judge, the game,
+ * and everything drawn over and beside them.
  *
- * Built once on page load in a dormant state: nothing is requested, nothing
- * is fetched, and no frame is looked at until `play()` is called from a
- * click.
+ * Built once on page load. Nothing is requested and no camera is touched
+ * until `play()` is called from a click; the demo match needs neither.
  */
 class Arena {
   constructor(data) {
@@ -329,6 +449,26 @@ class Arena {
 
     this.doll = window.createDoll ? createDoll(el("arenaDoll")) : null;
     this.chant = new ChantPlayer(data.chant);
+    this.timer = new SevenSegment(el("timerDigits"), 2);
+    this.scene = typeof createDemoScene === "function" ? createDemoScene(el("demoCanvas")) : null;
+
+    /** "demo", "camera", "replay", or "idle" while nothing is running. */
+    this.mode = "idle";
+    /** What frames are read from: the camera video or the demo canvas. */
+    this.source = null;
+    /** The camera is shown mirrored, so its boxes are drawn mirrored too. */
+    this.mirror = false;
+    this.matchConfig = DEMO_MATCH;
+    this.demoPaused = false;
+    /** Whether the demo may start, pause and restart by itself. */
+    this.autoplay = false;
+    /**
+     * Moves on with every `halt()`. A camera start awaits the permission
+     * prompt and then the pose model; if anything else has happened by the
+     * time either answers, the counter has moved and that start is abandoned
+     * instead of taking over the stage.
+     */
+    this.runId = 0;
 
     this.difficulty = "standard";
     this.threshold = this.config.diffThreshold * DIFFICULTY.standard;
@@ -349,17 +489,16 @@ class Arena {
     this.poseSource = null;
     this.stream = null;
     this.rafId = null;
-    // True once a match or a replay owns the page. Until then the hero doll
-    // runs her own demo loop, and nothing here may interrupt it — a page
-    // that has not been played yet should still be showing the mechanic.
-    this.live = false;
     this.registrationSince = null;
     this.traces = new Map();
     this.rows = new Map();
     this.replayTimer = null;
+    this.replayVideo = null;
     /** Cancels a confetti burst still in flight, or null. */
     this.stopConfetti = null;
     this.freezeTimer = null;
+    this.whyTimer = null;
+    this.restartTimer = null;
 
     const canvas = document.createElement("canvas");
     canvas.width = 96;
@@ -372,8 +511,37 @@ class Arena {
 
   /* ------------------------------------------------------------ lifecycle */
 
+  /**
+   * The polite live region. The demo writes nothing to it: a match nobody
+   * started, announced every twenty seconds, would be noise to anyone
+   * listening to the page.
+   */
   setStatus(text) {
+    if (this.mode === "demo") return;
     if (this.status) this.status.textContent = text;
+  }
+
+  setMode(mode) {
+    this.mode = mode;
+    this.stage.dataset.mode = mode;
+    const frame = el("console");
+    if (frame) frame.dataset.mode = mode;
+    const [badge, caption] = MODE_TEXT[mode] || MODE_TEXT.idle;
+    const badgeText = el("stageBadgeText");
+    if (badgeText) badgeText.textContent = badge;
+    const badgeNode = el("stageBadge");
+    if (badgeNode) badgeNode.hidden = !badge;
+    const captionNode = el("stageCaption");
+    if (captionNode && caption) captionNode.textContent = caption;
+    const stop = el("btnStop");
+    if (stop) stop.hidden = mode !== "camera";
+    // Play is only ever held down while a camera match is starting; leaving
+    // for any other mode, even halfway through that start, releases it.
+    const play = el("btnPlay");
+    if (play && mode !== "camera") play.disabled = false;
+    // The stage keeps a 4:3 shape unless a camera says otherwise.
+    if (mode !== "camera") this.stage.style.aspectRatio = "";
+    this.renderThresholdNotes();
   }
 
   /**
@@ -416,6 +584,7 @@ class Arena {
   resetStage() {
     delete this.stage.dataset.outcome;
     delete this.stage.dataset.freeze;
+    delete this.stage.dataset.armed;
     if (this.lightsOut) this.lightsOut.dataset.on = "false";
     if (this.flash) this.flash.dataset.on = "false";
     if (this.stopConfetti) {
@@ -428,25 +597,14 @@ class Arena {
     const previous = this.stage.dataset.phase;
     this.stage.dataset.phase = phase;
     if (previous === "GREEN" && phase === "RED") this.snapToRed();
+    const [word, sub] = LIGHT_WORDS[phase] || LIGHT_WORDS.LOBBY;
     const pill = el("phasePill");
     if (pill) pill.dataset.phase = phase;
-    const word = el("phaseWord");
-    if (word) {
-      word.textContent =
-        phase === "GREEN"
-          ? "Green light"
-          : phase === "RED"
-            ? "Red light"
-            : phase === "COUNTDOWN"
-              ? "Get ready"
-              : phase === "VICTORY"
-                ? "Victory"
-                : phase === "WIPEOUT"
-                  ? "Wipeout"
-                  : "Lobby";
-    }
+    const wordNode = el("phaseWord");
+    if (wordNode) wordNode.textContent = word;
+    this.setPhaseSub(sub);
+    showLight(phase);
     if (this.doll) this.doll.setPhase(phase);
-    if (this.live && window.rlHeroDemo) window.rlHeroDemo.follow(phase);
     Probe.note(phase);
   }
 
@@ -455,58 +613,61 @@ class Arena {
     if (sub) sub.textContent = text;
   }
 
-  async play() {
-    const button = el("btnPlay");
-    if (button) button.disabled = true;
+  /**
+   * Stop whatever the stage is doing and clear it.
+   *
+   * Every mode starts here, because two of them running at once — a camera
+   * loop still writing boxes over a replay, or a demo player walking through
+   * a webcam match — would be indistinguishable from a bug.
+   */
+  halt() {
+    this.runId += 1;
+    if (this.rafId !== null) cancelAnimationFrame(this.rafId);
+    this.rafId = null;
+    this.safeAudio(() => this.chant.stop());
+    this.releaseCamera();
+    if (this.poseSource && this.poseSource !== this.scene && this.poseSource.close) {
+      try {
+        this.poseSource.close();
+      } catch (err) {
+        // A runtime that will not close is still a runtime we are done with.
+      }
+    }
+    this.poseSource = null;
+    this.source = null;
     this.stopReplay();
+    for (const name of ["whyTimer", "restartTimer"]) {
+      if (this[name] !== null) window.clearTimeout(this[name]);
+      this[name] = null;
+    }
     this.resetStage();
-    this.setStatus("Asking for the camera.");
-
-    try {
-      this.stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
-        audio: false,
-      });
-    } catch (err) {
-      this.fail(
-        "No camera",
-        "The arena needs a camera to referee anyone. Watch a recorded match instead — every number on this page was measured without one."
-      );
-      Probe.note("nocamera");
-      return;
-    }
-
-    this.video.srcObject = this.stream;
-    this.stage.dataset.live = "true";
-    this.video.play().catch(() => {});
-    this.setStatus("Loading the pose runtime.");
-
-    try {
-      this.poseSource = await createPoseSource();
-    } catch (err) {
-      this.fail(
-        "No pose runtime",
-        "The pose model could not be fetched, so there is nobody to referee. Everything else on this page works without it."
-      );
-      Probe.note("noposeruntime");
-      this.releaseCamera();
-      return;
-    }
-
-    this.live = true;
-    if (this.idle) this.idle.hidden = true;
+    this.overlay.innerHTML = "";
+    this.roster.innerHTML = "";
+    delete this.roster.dataset.compact;
+    this.rows.clear();
     this.endCard.dataset.show = "false";
     this.whyCard.dataset.show = "false";
+    if (this.idle) this.idle.hidden = true;
+    this.game = null;
+    this.demoPaused = false;
+    // Whatever the last match measured belongs to that match; a camera that
+    // is only being asked for has not been measured yet.
+    this.baselines.clear();
+    this.calibration = null;
+    this.calibrationDone = false;
+    this.applyThreshold();
+    this.timer.set("--");
+    const label = el("timerLabel");
+    if (label) label.textContent = "waiting";
+    this.setPhase("LOBBY");
+  }
 
-    try {
-      this.chant.resume();
-    } catch (err) {
-      // Audio is a garnish here; a match is perfectly playable in silence.
-    }
-
+  /** Start a fresh match on whatever source and pose source are set. */
+  beginMatch() {
     this.game = null;
     this.registrationSince = null;
-    this.tracker.reset();
+    // A fresh tracker per match, so numbering starts again at 001.
+    this.tracker = new BoxTracker();
     this.stabilizer.reset();
     this.judge.reset();
     this.sampler.reset();
@@ -518,19 +679,145 @@ class Arena {
     this.calibrationDone = false;
     this.applyThreshold();
     this.setPhase("LOBBY");
-    this.setPhaseSub("Step into frame");
-    this.setStatus("Waiting for a player to stand in frame.");
-    Probe.note("camera");
-
+    this.setPhaseSub(this.mode === "demo" ? "Players lining up" : "Step into frame");
     this.loop();
   }
 
-  fail(title, detail) {
-    if (this.idle) {
-      this.idle.hidden = false;
-      this.idle.querySelector("h3").textContent = title;
-      this.idle.querySelector("p").textContent = detail;
+  /** The demo match: drawn players, no camera, no network. */
+  startDemo() {
+    if (!this.scene) return;
+    this.halt();
+    this.setMode("demo");
+    this.scene.reset();
+    this.source = this.scene.canvas;
+    this.poseSource = this.scene;
+    this.mirror = false;
+    this.matchConfig = DEMO_MATCH;
+    this.beginMatch();
+    Probe.note("demo");
+  }
+
+  /**
+   * Stop the demo while nobody can see it, and leave the stage ready to pick
+   * it up again. A match playing to an empty room costs a laptop battery for
+   * nothing.
+   */
+  pauseDemo() {
+    if (this.mode === "demo" && this.demoPaused) return;
+    this.halt();
+    this.setMode("demo");
+    if (this.scene) this.scene.reset();
+    this.demoPaused = true;
+  }
+
+  /**
+   * The demo, drawn and waiting behind a card, for a visitor who has asked
+   * for less motion: it plays only when they start it.
+   */
+  idleDemo() {
+    if (!this.scene) {
+      this.halt();
+      return;
     }
+    this.halt();
+    this.setMode("demo");
+    this.scene.reset();
+    this.showIdle(
+      "A demo match is ready",
+      "Drawn players, refereed by the real code. It plays when you start it.",
+      true
+    );
+  }
+
+  async play() {
+    const button = el("btnPlay");
+    if (button) button.disabled = true;
+    this.halt();
+    const run = this.runId;
+    this.setMode("camera");
+    this.showIdle(
+      "Starting your camera",
+      "Allow camera access when your browser asks. The pose model downloads once; after that everything runs on this device.",
+      false
+    );
+    this.setStatus("Asking for the camera.");
+
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
+        audio: false,
+      });
+    } catch (err) {
+      // A prompt dismissed by the visitor moving on is not a missing camera.
+      if (run !== this.runId) return;
+      this.fail(
+        "No camera",
+        "The referee needs a camera to see you. Watch the demo match or the recorded one instead; neither needs a camera."
+      );
+      Probe.note("nocamera");
+      return;
+    }
+    if (run !== this.runId) {
+      // The visitor moved on while the permission prompt was up.
+      for (const track of stream.getTracks()) track.stop();
+      return;
+    }
+
+    this.stream = stream;
+    this.video.srcObject = stream;
+    this.stage.dataset.live = "true";
+    this.video.play().catch(() => {});
+    this.setStatus("Loading the pose model.");
+
+    let poseSource;
+    try {
+      poseSource = await createPoseSource();
+    } catch (err) {
+      // If the visitor has moved on, `halt()` already stopped this camera.
+      if (run !== this.runId) return;
+      this.fail(
+        "The pose model did not load",
+        "Without it there is nobody to referee. Check your connection and try again, or watch the demo match, which needs no download."
+      );
+      Probe.note("noposeruntime");
+      this.releaseCamera();
+      return;
+    }
+    if (run !== this.runId) {
+      if (poseSource && poseSource.close) poseSource.close();
+      return;
+    }
+
+    this.poseSource = poseSource;
+    this.source = this.video;
+    this.mirror = true;
+    this.matchConfig = {
+      countdownS: this.config.countdownS,
+      durationS: this.config.durationS,
+      phaseMinS: this.config.phaseMinS,
+      phaseMaxS: this.config.phaseMaxS,
+    };
+    if (this.idle) this.idle.hidden = true;
+    if (button) button.disabled = false;
+    this.safeAudio(() => this.chant.resume());
+    this.beginMatch();
+    this.setStatus("Waiting for a player to stand in frame.");
+    Probe.note("camera");
+  }
+
+  /** The card over the stage: a message, and optionally a way out of it. */
+  showIdle(title, detail, offerDemo) {
+    if (!this.idle) return;
+    this.idle.hidden = false;
+    this.idle.querySelector(".idle-title").textContent = title;
+    this.idle.querySelector(".idle-text").textContent = detail;
+    this.idle.querySelector(".cta-row").hidden = !offerDemo;
+  }
+
+  fail(title, detail) {
+    this.setMode("idle");
+    this.showIdle(title, detail, true);
     const button = el("btnPlay");
     if (button) button.disabled = false;
     this.setStatus(title + ". " + detail);
@@ -547,46 +834,75 @@ class Arena {
 
   /**
    * Stop the camera and the pose loop, without touching the chant or the
-   * end card.
-   *
-   * Called both when a match finishes on its own (`endMatch`, where the
-   * chant has its own sting to play and the end card has to stay up) and
-   * when the visitor walks away from one (`stop`, where everything goes
-   * quiet). A match that has ended still has a live camera and a running
-   * `requestAnimationFrame` loop until this runs — nothing else in `loop()`
-   * checks whether the game is finished.
+   * end card. Called when a match finishes on its own, where the chant has
+   * its own sting to play and the end card has to stay up. A finished match
+   * still has a live camera and a running loop until this runs — nothing in
+   * `loop()` checks whether the game is over.
    */
   stopEngine() {
     if (this.rafId !== null) cancelAnimationFrame(this.rafId);
     this.rafId = null;
     this.releaseCamera();
-    if (this.poseSource && this.poseSource.close) {
+    if (this.poseSource && this.poseSource !== this.scene && this.poseSource.close) {
       try {
         this.poseSource.close();
       } catch (err) {
-        // A runtime that will not close is still a runtime we are done with.
+        // As in `halt`: closing is a courtesy.
       }
     }
     this.poseSource = null;
   }
 
-  stop() {
-    this.chant.stop();
-    this.stopEngine();
+  safeAudio(action) {
+    try {
+      action();
+    } catch (err) {
+      // Never let a muted or blocked audio context stop a match.
+    }
+  }
+
+  /** Sound belongs to a match somebody is playing, not to the demo. */
+  audible() {
+    return this.mode === "camera";
   }
 
   /* ----------------------------------------------------------- main loop */
 
+  sourceReady() {
+    if (!this.source) return false;
+    if (this.source === this.video) {
+      if (this.video.readyState < 2) return false;
+      this.fitStageToCamera();
+      return true;
+    }
+    return true;
+  }
+
+  /**
+   * Give the stage the camera's own shape.
+   *
+   * Boxes are placed in the video frame's coordinates. A stage of any other
+   * shape would crop the picture, and every box would drift off its player.
+   */
+  fitStageToCamera() {
+    const w = this.video.videoWidth;
+    const h = this.video.videoHeight;
+    if (!w || !h) return;
+    const ratio = w + " / " + h;
+    if (this.stage.style.aspectRatio !== ratio) this.stage.style.aspectRatio = ratio;
+  }
+
   loop() {
     this.rafId = requestAnimationFrame(() => this.loop());
-    if (this.video.readyState < 2) return;
+    if (!this.sourceReady()) return;
 
     // Monotonic, in seconds — the same unit `Game` and `FrameSampler` take.
     const now = performance.now() / 1000;
+    if (this.mode === "demo") this.scene.step(now, this.game);
 
     let boxes = [];
     try {
-      boxes = this.poseSource.detect(this.video, now * 1000);
+      boxes = this.poseSource.detect(this.source, now * 1000);
     } catch (err) {
       return;
     }
@@ -610,7 +926,7 @@ class Arena {
       this.handleEvents(events, now);
     }
 
-    this.render(tracks, now);
+    if (this.rafId !== null) this.render(tracks, now);
   }
 
   /**
@@ -625,7 +941,7 @@ class Arena {
     for (const track of tracks) {
       const rect = rects.get(track.id);
       if (!rect) continue;
-      const window96 = cropWindow(this.video, rect, this.cropCtx);
+      const window96 = cropWindow(this.source, rect, this.cropCtx);
       if (window96) crops[track.id] = window96;
     }
 
@@ -673,21 +989,20 @@ class Arena {
   awaitRegistration(tracks, now) {
     if (tracks.length === 0) {
       this.registrationSince = null;
-      this.setPhaseSub("Step into frame");
+      this.setPhaseSub(this.mode === "demo" ? "Players lining up" : "Step into frame");
       return;
     }
     if (this.registrationSince === null) this.registrationSince = now;
     const held = now - this.registrationSince;
     if (held < REGISTRATION_HOLD_S) {
-      this.setPhaseSub("Registering " + tracks.length);
+      this.setPhaseSub(
+        "Registering " + tracks.length + (tracks.length === 1 ? " player" : " players")
+      );
       return;
     }
 
     this.game = new Game({
-      countdownS: this.config.countdownS,
-      durationS: this.config.durationS,
-      phaseMinS: this.config.phaseMinS,
-      phaseMaxS: this.config.phaseMaxS,
+      ...this.matchConfig,
       graceS: this.config.graceS,
     });
     const ids = tracks.map((track) => track.id);
@@ -711,14 +1026,12 @@ class Arena {
         if (event.phase === "GREEN") this.finishCalibration();
         this.setPhase(event.phase);
 
-        if (event.phase === "GREEN") {
-          this.setPhaseSub("Chant running");
+        if (event.phase === "GREEN" && this.audible()) {
           this.safeAudio(() => this.chant.start());
         } else {
           this.safeAudio(() => this.chant.stop());
         }
-        if (event.phase === "RED") this.setPhaseSub("Grace");
-        if (event.phase === "COUNTDOWN") this.setPhaseSub("Countdown");
+        if (event.phase === "RED") this.setPhaseSub("Freeze: grace");
         if (this.game && this.game.finished) this.endMatch(event.phase);
       } else if (event.type === "PLAYER_ELIMINATED") {
         this.eliminate(event, now);
@@ -726,26 +1039,17 @@ class Arena {
     }
   }
 
-  safeAudio(action) {
-    try {
-      action();
-    } catch (err) {
-      // Never let a muted or blocked audio context stop a match.
-    }
-  }
-
   /**
    * The moment a player stops being a player.
    *
    * Three things land together, because one call is one event and it should
-   * not arrive in instalments: the box they were scored through breaks into
-   * shards and goes grey, their meter falls to the floor, and a low thump
-   * marks it hitting. The buzzer says *what* happened; this says how much it
-   * cost. Only the meter and the thump survive reduced motion — a number
-   * dropping is information, six shards flying apart is not.
+   * not arrive in instalments: the box they were scored through is stamped
+   * OUT and breaks, their meter falls to the floor, and a low thump marks it
+   * hitting. Only the stamp, the meter and the thump survive reduced motion
+   * — a stamp is information, six shards flying apart is not.
    */
   breakPlayer(trackId) {
-    this.safeAudio(() => this.chant.thud());
+    if (this.audible()) this.safeAudio(() => this.chant.thud());
 
     const row = this.rows.get(trackId);
     if (row) {
@@ -777,7 +1081,7 @@ class Arena {
   }
 
   eliminate(event, now) {
-    this.safeAudio(() => this.chant.buzz());
+    if (this.audible()) this.safeAudio(() => this.chant.buzz());
     this.fire(this.flash, "call");
     if (this.doll) this.doll.snap();
     this.breakPlayer(event.trackId);
@@ -785,19 +1089,24 @@ class Arena {
     const trace = this.traces.get(event.trackId) || [];
     const reason =
       event.reason === "moved"
-        ? "moved on an armed red light"
-        : "left the arena — the tracker lost them";
-    const peak = trace.length ? Math.max.apply(null, trace) : 0;
+        ? "Kept moving after the red light's grace ran out."
+        : "Left the frame, so the referee lost sight of them.";
 
-    this.whyCard.dataset.show = "true";
     this.whyCard.innerHTML =
-      "<h4>Player " + event.trackId + " is out</h4>" +
+      "<h3>Player " + bib(event.trackId) + " is out</h3>" +
       '<p class="why-line">' + reason + "</p>" +
-      '<p class="why-line">peak ' + fmt(peak, 3) + " vs threshold " + fmt(this.threshold, 3) +
-      " body-fractions/s</p>" +
       sparkline(trace, this.threshold);
+    this.whyCard.dataset.show = "true";
+    if (this.whyTimer !== null) window.clearTimeout(this.whyTimer);
+    this.whyTimer = window.setTimeout(() => {
+      this.whyCard.dataset.show = "false";
+      this.whyTimer = null;
+    }, WHY_CARD_MS);
 
-    this.setStatus("Player " + event.trackId + " eliminated: " + reason + ".");
+    this.setStatus(
+      "Player " + bib(event.trackId) + " is out: " +
+        (event.reason === "moved" ? "moved on a red light." : "left the frame.")
+    );
     // The id, not just the fact. `scripts/verify_site.py` runs a walker and a
     // statue side by side and has to be able to tell which of them was called.
     Probe.note("out:" + event.trackId);
@@ -805,33 +1114,47 @@ class Arena {
 
   endMatch(phase) {
     this.safeAudio(() => this.chant.stop());
-    this.safeAudio(() => this.chant.sting(phase === "VICTORY"));
-    // The match is decided; nothing after this point needs a camera frame
-    // or a pose detection. Stopping here — not waiting for "Play again" —
-    // is what actually releases the camera, since `loop()` has no idea the
-    // game is finished and would otherwise keep detecting and rendering
-    // against a stage nobody can act on any more. `stopEngine` leaves the
-    // chant alone (the sting above is still playing) and leaves the end
-    // card and roster exactly as rendered.
+    if (this.audible()) this.safeAudio(() => this.chant.sting(phase === "VICTORY"));
+    // The match is decided; nothing after this point needs a frame or a pose
+    // detection. Stopping here — not waiting for "Play again" — is what
+    // actually releases the camera, since `loop()` has no idea the game is
+    // finished and would otherwise keep detecting and rendering against a
+    // stage nobody can act on any more.
     this.stopEngine();
     const button = el("btnPlay");
     if (button) button.disabled = false;
     const survivors = this.game ? this.game.aliveCount : 0;
     const registered = this.game ? this.game.players.size : 0;
-    this.showEnd(
-      phase,
-      survivors,
-      registered,
-      phase === "VICTORY"
-        ? survivors === 1
-          ? "One player stood still long enough. The clock ran out first."
-          : survivors + " players stood still long enough. The clock ran out first."
-        : "Every registered player was called out before the clock ran down."
-    );
-    // The engine loop has stopped, so the ring would otherwise hold its last
-    // in-match reading ("1 second left") under the end card. With the game
-    // finished, `renderRing` shows who is left instead; `now` is not read.
-    this.renderRing(0);
+    const won = phase === "VICTORY";
+    const detail =
+      this.mode === "demo"
+        ? this.autoplay
+          ? "That was the demo. The next one starts in a moment, or play it yourself."
+          : "That was the demo. Watch it again, or play it yourself."
+        : won
+          ? survivors === 1
+            ? "One player stood still long enough. The clock ran out first."
+            : survivors + " players stood still long enough. The clock ran out first."
+          : "Every player was called out before the clock ran down.";
+    this.showEnd(phase, survivors, registered, detail);
+    // The loop has stopped, so the timer would otherwise hold its last
+    // in-match reading under the end card; it shows who is left instead.
+    this.renderTimer(0);
+    // The next demo starts by itself only for a visitor who has not asked
+    // for less motion; one who started it by hand gets the card to stay.
+    if (this.mode === "demo" && this.autoplay) {
+      const restart = () => {
+        this.restartTimer = null;
+        if (this.mode !== "demo" || this.demoPaused) return;
+        // Somebody tabbing through the result card keeps it until they leave.
+        if (this.endCard.contains(document.activeElement)) {
+          this.restartTimer = window.setTimeout(restart, 1500);
+          return;
+        }
+        this.startDemo();
+      };
+      this.restartTimer = window.setTimeout(restart, DEMO_RESTART_MS);
+    }
     Probe.note("end:" + phase);
   }
 
@@ -842,8 +1165,8 @@ class Arena {
    * left standing out of how many started is the result, and "Victory" is
    * only the name for it. Underneath, the arena reacts once — paper thrown
    * from the corners and a small bow for a win, the lights swept out for a
-   * wipeout — and then holds completely still, because a card somebody is
-   * reading should not be moving.
+   * wipeout — and then holds still, because a card somebody is reading
+   * should not be moving.
    *
    * @param {string} phase "VICTORY" or "WIPEOUT".
    * @param {number} survivors Players still standing at the final whistle.
@@ -856,13 +1179,17 @@ class Arena {
     this.endCard.dataset.show = "true";
     this.endCard.dataset.outcome = phase;
 
-    // The eyebrow names what ended the match; the count says how it went.
-    // Two lines that both said "nobody is left" would be one line twice.
     const eyebrow = el("endEyebrow");
     if (eyebrow) {
-      eyebrow.textContent = won ? "The clock ran out" : "The referee got everyone";
+      eyebrow.textContent =
+        this.mode === "demo"
+          ? "Demo match over"
+          : this.mode === "replay"
+            ? "Recorded match over"
+            : won
+              ? "The clock ran out"
+              : "The referee got everyone";
     }
-    this.setPhaseSub("Match over");
     el("endTitle").textContent = won ? "Victory" : "Wipeout";
     const score = el("endScore");
     if (score) {
@@ -871,6 +1198,22 @@ class Arena {
         '<span class="of">of ' + registered + " still standing</span>";
     }
     el("endDetail").textContent = detail;
+
+    // The way on from here depends on what just finished.
+    const again = el("btnAgainText");
+    if (again) again.textContent = this.mode === "camera" ? "Play again" : "Play with your camera";
+    const second = el("btnEndSecond");
+    if (second) {
+      // After a demo that restarts by itself, the other thing to watch is the
+      // recorded match; anywhere else, it is the demo.
+      const toReplay = this.mode === "demo" && this.autoplay;
+      second.dataset.action = toReplay ? "replay" : "demo";
+      second.textContent = toReplay
+        ? "Watch a recorded match"
+        : this.mode === "demo"
+          ? "Watch the demo again"
+          : "Watch the demo match";
+    }
 
     if (won) {
       this.celebrate();
@@ -881,27 +1224,15 @@ class Arena {
   }
 
   /**
-   * Throw paper across the stage, in the arena's own colours.
-   *
-   * The palette is read live rather than hard-coded, so a burst under the
-   * night theme is made of the night theme's green, violet and ink — three
-   * colours that are guaranteed to read against whichever background the
-   * visitor is on. The fourth is the referee's own paint, the ochre of her
-   * dress, which does not change with the theme and should not change here.
+   * Throw paper across the stage, in the game's own colours: tracksuit teal,
+   * guard pink, and the doll's orange and yellow, which read on the dark
+   * stage in either theme.
    */
   celebrate() {
     if (lessMotion() || !this.fx || typeof burstConfetti !== "function") return;
     if (this.stopConfetti) this.stopConfetti();
-    const paint = window.getComputedStyle(document.documentElement);
-    const token = (name, fallback) =>
-      paint.getPropertyValue(name).trim() || fallback;
     this.stopConfetti = burstConfetti(this.fx, {
-      colors: [
-        token("--green-lit", "#17a34a"),
-        token("--accent", "#4a3aa7"),
-        "#d98324",
-        token("--ink", "#14201d"),
-      ],
+      colors: ["#22a08d", "#ff5c9b", "#f08a24", "#ffc531"],
     });
   }
 
@@ -910,16 +1241,15 @@ class Arena {
   render(tracks, now) {
     const armed = this.game ? this.game.armed(now) : false;
     if (this.doll) this.doll.setArmed(armed);
-    if (this.live && window.rlHeroDemo && this.stage.dataset.phase === "RED") {
-      window.rlHeroDemo.follow("RED");
-    }
+    if (armed) this.stage.dataset.armed = "true";
+    else delete this.stage.dataset.armed;
     if (this.game && this.stage.dataset.phase === "RED") {
-      this.setPhaseSub(armed ? "Armed" : "Grace");
+      this.setPhaseSub(armed ? "Freeze: watching" : "Freeze: grace");
     }
 
     this.renderBoxes(tracks);
     this.renderRoster(tracks);
-    this.renderRing(now);
+    this.renderTimer(now);
   }
 
   renderBoxes(tracks) {
@@ -929,7 +1259,7 @@ class Arena {
       let node = this.overlay.querySelector('[data-track="' + track.id + '"]');
       if (!node) {
         node = document.createElement("div");
-        node.className = "player-box meter-box";
+        node.className = "player-box";
         node.dataset.track = String(track.id);
         node.innerHTML =
           '<span class="player-tag"></span>' +
@@ -943,20 +1273,20 @@ class Arena {
       // holds still underneath.
       const drawn = this.stabilizer.smoothed(track.id) || track.box;
 
-      // The video is mirrored for the player's benefit, so the overlay has to
-      // be mirrored with it — but by arithmetic, not by a transform, or every
-      // label would come out backwards.
-      node.style.left = fmt((1 - drawn.x2) * 100, 2) + "%";
+      // A mirrored camera needs a mirrored overlay — by arithmetic, not by a
+      // transform, or every label would come out backwards.
+      const left = this.mirror ? 1 - drawn.x2 : drawn.x1;
+      node.style.left = fmt(left * 100, 2) + "%";
       node.style.top = fmt(drawn.y1 * 100, 2) + "%";
       node.style.width = fmt((drawn.x2 - drawn.x1) * 100, 2) + "%";
       node.style.height = fmt((drawn.y2 - drawn.y1) * 100, 2) + "%";
 
       const player = this.game ? this.game.players.get(track.id) : null;
-      const smoothed = this.judge.smoothed(track.id);
+      const out = Boolean(player && !player.alive);
+      const smoothed = out ? 0 : this.judge.smoothed(track.id);
       const over = smoothed > this.threshold;
-      node.dataset.state = player && !player.alive ? "out" : over ? "warn" : "safe";
-      node.querySelector(".player-tag").textContent =
-        "P" + track.id + "  " + fmt(smoothed, 3);
+      node.dataset.state = out ? "out" : over ? "warn" : "safe";
+      node.querySelector(".player-tag").textContent = bib(track.id);
       const meter = node.querySelector(".meter");
       meter.dataset.over = over ? "true" : "false";
       meter.querySelector(".fill").style.width =
@@ -966,6 +1296,22 @@ class Arena {
     for (const node of Array.from(this.overlay.children)) {
       if (!live.has(Number(node.dataset.track))) node.remove();
     }
+  }
+
+  /** One patch per player, in the panel beside the stage. */
+  rosterRow(id, withMeter) {
+    let row = this.rows.get(id);
+    if (row) return row;
+    row = document.createElement("div");
+    row.className = "bib";
+    row.innerHTML =
+      '<span class="bib-num">' + bib(id) + "</span>" +
+      '<span class="bib-body">' +
+      (withMeter ? '<span class="meter"><span class="fill"></span><span class="tick"></span></span>' : "") +
+      '<span class="bib-state"></span></span>';
+    this.roster.appendChild(row);
+    this.rows.set(id, row);
+    return row;
   }
 
   renderRoster(tracks) {
@@ -980,66 +1326,42 @@ class Arena {
     }
 
     for (const id of ids) {
-      let row = this.rows.get(id);
-      if (!row) {
-        row = document.createElement("div");
-        row.className = "meter-row";
-        row.innerHTML =
-          '<span class="who">P' + id + "</span>" +
-          '<div class="meter"><div class="fill"></div><div class="tick"></div></div>' +
-          '<span class="val"></span>';
-        this.roster.appendChild(row);
-        this.rows.set(id, row);
-      }
+      const row = this.rosterRow(id, true);
       const player = this.game ? this.game.players.get(id) : null;
       const out = player ? !player.alive : false;
       const smoothed = out ? 0 : this.judge.smoothed(id);
       row.dataset.out = out ? "true" : "false";
-      row.querySelector(".val").textContent = out ? "out" : fmt(smoothed, 3);
+      row.querySelector(".bib-state").textContent = out ? "Out" : "";
       const meter = row.querySelector(".meter");
+      if (!meter) continue;
       meter.dataset.over = !out && smoothed > this.threshold ? "true" : "false";
       meter.querySelector(".fill").style.width = out
         ? "0%"
         : fmt(Math.min(smoothed / (this.threshold * METER_SCALE), 1) * 100, 1) + "%";
     }
-
-    if (ids.length === 0 && !this.roster.dataset.empty) {
-      this.roster.dataset.empty = "1";
-    } else if (ids.length > 0) {
-      delete this.roster.dataset.empty;
-    }
   }
 
-  renderRing(now) {
-    const ring = el("ring");
-    if (!ring || !this.game) return;
-
-    let fraction = 0;
-    let value = "";
-    let unit = "";
-    if (this.game.phase === "COUNTDOWN") {
-      const left = this.game.countdownLeft(now);
-      fraction = left / this.config.countdownS;
-      value = String(Math.ceil(left));
-      unit = "starting";
-    } else if (this.game.inMatch) {
-      const left = this.game.timeLeft(now);
-      fraction = left / this.config.durationS;
-      value = String(Math.ceil(left));
-      unit = value === "1" ? "second left" : "seconds left";
-    } else {
-      fraction = 0;
-      value = String(this.game.aliveCount);
-      unit = this.game.aliveCount === 1 ? "survivor" : "survivors";
+  renderTimer(now) {
+    const label = el("timerLabel");
+    if (!this.game) {
+      this.timer.set("--");
+      if (label) label.textContent = "waiting";
+      return;
     }
-
-    ring.dataset.phase = this.game.phase;
-    el("ringValue").textContent = value;
-    el("ringUnit").textContent = unit;
-    ring.querySelector(".sweep").style.strokeDashoffset = fmt(
-      RING_CIRCUMFERENCE * (1 - Math.max(Math.min(fraction, 1), 0)),
-      2
-    );
+    let value;
+    let text;
+    if (this.game.phase === "COUNTDOWN") {
+      value = Math.ceil(this.game.countdownLeft(now));
+      text = "get ready";
+    } else if (this.game.inMatch) {
+      value = Math.ceil(this.game.timeLeft(now));
+      text = value === 1 ? "second left" : "seconds left";
+    } else {
+      value = this.game.aliveCount;
+      text = "still standing";
+    }
+    this.timer.set(String(Math.max(value, 0)));
+    if (label) label.textContent = text;
   }
 
   /* ------------------------------------------ difficulty and calibration */
@@ -1127,41 +1449,37 @@ class Arena {
     this.applyThreshold();
   }
 
-  /** The two lines that tell a player what number they are being held to. */
+  /**
+   * The two lines under the stage: what the chosen difficulty means, and —
+   * on a camera match — what measuring the camera found. The numbers behind
+   * them are on the measurements page; here they are said in words.
+   */
   renderThresholdNotes() {
-    const scale = DIFFICULTY[this.difficulty];
     const note = el("difficultyNote");
-    if (note) {
-      note.textContent =
-        "cutoff " + fmt(this.presetThreshold, 4) + " body-fractions/s — " +
-        (scale === 1
-          ? "the lab-measured midpoint"
-          : fmt(scale, 1) + "x the lab-measured midpoint of " +
-            fmt(this.config.diffThreshold, 4));
-    }
+    if (note) note.textContent = DIFFICULTY_NOTES[this.difficulty] || "";
 
     const live = el("calibrationNote");
     if (!live) return;
+    if (this.mode !== "camera") {
+      live.textContent = "";
+      return;
+    }
     if (!this.calibrationDone) {
       live.textContent =
-        "The countdown measures what your camera reads on a player standing " +
-        "still, and lifts the cutoff if it has to.";
+        "The countdown measures your camera while everyone stands still, and " +
+        "raises the line if the picture is noisy.";
       return;
     }
     if (this.calibration === null) {
       live.textContent =
         "Nobody held still long enough during the countdown to measure your " +
-        "camera. Cutoff " + fmt(this.threshold, 4) + ", straight from the preset.";
+        "camera, so the line stays where the difficulty puts it.";
       return;
     }
     const raised = this.threshold > this.presetThreshold + 1e-12;
-    live.textContent =
-      "Calibrated to your camera: cutoff " + fmt(this.threshold, 4) +
-      (raised
-        ? ", raised from " + fmt(this.presetThreshold, 4) + " to clear a noise floor of " +
-          fmt(this.calibration, 4) + "."
-        : ". Your noise floor measured " + fmt(this.calibration, 4) +
-          ", well under the preset.");
+    live.textContent = raised
+      ? "Calibrated to your camera: the line was raised to clear its noise."
+      : "Calibrated to your camera: its noise sits well under the line.";
   }
 
   /* -------------------------------------------------------------- replay */
@@ -1169,40 +1487,30 @@ class Arena {
   /**
    * The recorded match — for anyone without a camera, or unwilling.
    *
-   * Two views of the same seeded run share this scene. The primary one is
-   * `docs/demo_match.mp4`: real HUD-annotated footage of `redlight play`
+   * `docs/demo_match.mp4` is real HUD-annotated footage of `redlight play`
    * refereeing the benchmark video, boxes and verdicts and all — not staged,
-   * the same run the README's `redlight benchmark` command reproduces. The
-   * second is an animated data view: the players, the eliminations, their
-   * times and their reasons, read from `RL_DATA.benchmark.demo_match`. Both
-   * use the run's recorded light schedule (`REPLAY_LIGHT_STARTS_S`).
+   * the same run the README's commands reproduce. Beside it, the panel shows
+   * the run's recorded light schedule (`REPLAY_LIGHT_STARTS_S`) and its
+   * calls, read from `RL_DATA.benchmark.demo_match`.
    *
-   * While the video is on screen, the video is the clock. The sidebar's
-   * light, doll, ring and roster are all computed from `video.currentTime`,
-   * so a slow first frame, buffering, a pause or a scrub moves them with the
-   * footage instead of letting them run ahead of it. The recording opens in
-   * the lobby: the match was auto-started on the frame where
-   * `auto_start_frames` frames in a row had seen a player (frame 19 at
-   * 10 fps, since every frame of this footage has a walker in it), and the
-   * match clock began `countdown_s` after that. The data view has no footage,
-   * so it runs on the page clock from wherever the video had got to.
+   * The video is the clock. The light, doll, timer and players are all
+   * computed from `video.currentTime`, so a slow first frame, buffering, a
+   * pause or a scrub moves them with the footage instead of letting them run
+   * ahead of it. The recording opens in the lobby: the match was
+   * auto-started on the frame where `auto_start_frames` frames in a row had
+   * seen a player (frame 19 at 10 fps, since every frame of this footage has
+   * a walker in it), and the match clock began `countdown_s` after that. If
+   * the video cannot play at all, the page clock stands in for it.
    *
    * Everything shown is recomputed from the time on every frame rather than
    * latched, so scrubbing backwards brings eliminated players back.
    */
   startReplay() {
-    this.stopReplay();
-    // A replay and a live match must never run at once: one camera loop
-    // still writing boxes over a replay would be indistinguishable from a
-    // bug. Starting a replay ends any match in progress.
-    if (this.rafId !== null) {
-      this.stop();
-      const button = el("btnPlay");
-      if (button) button.disabled = false;
-    }
-    this.stage.dataset.live = "false";
-    this.resetStage();
-    this.live = true;
+    this.halt();
+    const button = el("btnPlay");
+    if (button) button.disabled = false;
+    this.setMode("replay");
+
     const demo = this.data.benchmark.demo_match;
     const grace = demo.config.grace_s;
     const countdown = demo.config.countdown_s;
@@ -1213,142 +1521,68 @@ class Arena {
     const countdownAt = (demo.config.auto_start_frames - 1) / fps;
     const matchAt = countdownAt + countdown;
 
-    if (this.idle) this.idle.hidden = true;
-    this.endCard.dataset.show = "false";
-    this.whyCard.dataset.show = "false";
-    this.overlay.innerHTML = "";
-    this.roster.innerHTML = "";
-    this.rows.clear();
+    const video = document.createElement("video");
+    video.className = "replay-video";
+    video.src = "demo_match.mp4";
+    video.poster = "demo_poster.jpg";
+    video.muted = true;
+    video.controls = true;
+    video.playsInline = true;
+    video.setAttribute("aria-label", "Recorded match refereed by the Python engine");
+    this.stage.insertBefore(video, this.overlay);
+    this.replayVideo = video;
+    video.play().catch(() => {});
 
-    const tokens = [];
-    for (let i = 1; i <= demo.players; i += 1) {
-      tokens.push({ id: i, out: false });
-    }
-
-    const scene = document.createElement("div");
-    scene.className = "replay-scene";
-    scene.innerHTML =
-      '<div class="replay-tabs" role="tablist" aria-label="Recorded match view">' +
-      '<button type="button" class="replay-tab" data-view="video" aria-pressed="true">' +
-      "Recorded video</button>" +
-      '<button type="button" class="replay-tab" data-view="data" aria-pressed="false">' +
-      "Data replay</button>" +
-      "</div>" +
-      '<div class="replay-view" data-view="video">' +
-      '<video class="replay-video" src="demo_match.mp4" poster="demo_poster.jpg" ' +
-      'muted controls playsinline></video>' +
-      '<p class="replay-note">The referee calling a real recorded match: ' +
-      "public benchmark footage of pedestrians in a courtyard, playing as the " +
-      "runners. Every box, meter and verdict here is the engine's, not staged. " +
-      "Seeded and reproducible — <code>redlight benchmark</code> from the " +
-      "README's install steps replays this exact match.</p>" +
-      "</div>" +
-      '<div class="replay-view" data-view="data" hidden>' +
-      '<div class="replay-field" id="replayField"></div>' +
-      '<p class="replay-note">Data replay: ' + demo.players + " players, " +
-      demo.eliminations.length + " calls, " + demo.survivors +
-      " left standing, on the recorded light schedule.</p>" +
-      "</div>";
-    this.overlay.appendChild(scene);
-
-    const tabs = scene.querySelectorAll(".replay-tab");
-    const views = scene.querySelectorAll(".replay-view");
-    const video = scene.querySelector(".replay-video");
-
-    // One timeline for both views, in seconds since the recording began.
-    // The page clock is only used when the video is not on screen (or could
-    // not be played at all); `pageOrigin` is set so that it carries on from
-    // wherever the video was.
-    let view = "video";
-    let pageOrigin = performance.now() / 1000;
-    const videoIsClock = () => view === "video" && video !== null && !video.error;
+    const pageOrigin = performance.now() / 1000;
     const recordingTime = () =>
-      videoIsClock() ? video.currentTime : performance.now() / 1000 - pageOrigin;
+      video.error ? performance.now() / 1000 - pageOrigin : video.currentTime;
 
-    for (const tab of tabs) {
-      tab.addEventListener("click", () => {
-        const next = tab.dataset.view;
-        if (next === view) return;
-        const t = recordingTime();
-        view = next;
-        for (const b of tabs) b.setAttribute("aria-pressed", String(b === tab));
-        for (const v of views) v.hidden = v.dataset.view !== next;
-        if (!video) return;
-        if (next === "video") {
-          if (Number.isFinite(video.duration)) video.currentTime = Math.min(t, video.duration);
-          video.play().catch(() => {});
-        } else {
-          pageOrigin = performance.now() / 1000 - t;
-          video.pause();
-        }
-      });
-    }
-    if (video) video.play().catch(() => {});
-
-    const field = scene.querySelector("#replayField");
-    for (const token of tokens) {
-      const node = document.createElement("div");
-      node.className = "replay-token";
-      node.dataset.token = String(token.id);
-      node.innerHTML =
-        '<span class="tk-body"></span><span class="tk-id">' + token.id + "</span>" +
-        '<span class="tk-why"></span>';
-      field.appendChild(node);
-      token.node = node;
+    const players = [];
+    this.roster.dataset.compact = "true";
+    for (let id = 1; id <= demo.players; id += 1) {
+      const row = this.rosterRow(id, false);
+      players.push({ id, row, out: false });
     }
 
-    const ring = el("ring");
-    const showRing = (phase, value, unit, fraction) => {
-      if (!ring) return;
-      ring.dataset.phase = phase;
-      el("ringValue").textContent = value;
-      el("ringUnit").textContent = unit;
-      ring.querySelector(".sweep").style.strokeDashoffset = fmt(
-        RING_CIRCUMFERENCE * (1 - Math.max(Math.min(fraction, 1), 0)),
-        2
-      );
-    };
     const enter = (phase) => {
       if (this.stage.dataset.phase !== phase) this.setPhase(phase);
     };
+    const label = el("timerLabel");
 
     const step = () => {
       const matchT = recordingTime() - matchAt;
 
       if (matchT >= duration) {
-        // The final whistle: the ring stops counting and shows who is left,
-        // the way it does at the end of a live match.
+        // The final whistle: the timer shows who is left, the way it does at
+        // the end of a live match.
         const outcome = demo.outcome === "victory" ? "VICTORY" : "WIPEOUT";
         enter(outcome);
         if (this.doll) this.doll.setArmed(false);
-        showRing(
-          outcome,
-          String(demo.survivors),
-          demo.survivors === 1 ? "survivor" : "survivors",
-          0
-        );
+        delete this.stage.dataset.armed;
+        this.timer.set(String(demo.survivors));
+        if (label) label.textContent = "still standing";
         this.showEnd(
           outcome,
           demo.survivors,
           demo.players,
-          "Recorded by the Python engine on the benchmark footage — not staged, "
-            + "and reproducible from the README's install steps."
+          "Recorded by the Python engine on the benchmark footage. Not staged, " +
+            "and reproducible from the README's install steps."
         );
         this.replayTimer = null;
         Probe.note("replay-end");
         return;
       }
 
+      let armed = false;
       if (matchT < -countdown) {
         enter("LOBBY");
-        this.setPhaseSub("Registering");
-        if (this.doll) this.doll.setArmed(false);
-        showRing("LOBBY", "–", "waiting", 0);
+        this.setPhaseSub("Registering players");
+        this.timer.set("--");
+        if (label) label.textContent = "waiting";
       } else if (matchT < 0) {
         enter("COUNTDOWN");
-        this.setPhaseSub("Countdown");
-        if (this.doll) this.doll.setArmed(false);
-        showRing("COUNTDOWN", String(Math.ceil(-matchT)), "starting", -matchT / countdown);
+        this.timer.set(String(Math.ceil(-matchT)));
+        if (label) label.textContent = "get ready";
       } else {
         // `schedule` always spans exactly `[0, duration)`, so this lookup
         // succeeds for any `matchT` reachable here — the branch above already
@@ -1362,41 +1596,38 @@ class Arena {
         };
         enter(slot.phase);
         if (slot.phase === "RED") {
-          const armed = matchT - slot.from >= grace;
-          this.setPhaseSub(armed ? "Armed" : "Grace");
-          if (this.doll) this.doll.setArmed(armed);
-        } else {
-          this.setPhaseSub("Chant running");
-          if (this.doll) this.doll.setArmed(false);
+          armed = matchT - slot.from >= grace;
+          this.setPhaseSub(armed ? "Freeze: watching" : "Freeze: grace");
         }
-        field.dataset.phase = slot.phase;
         const left = Math.max(Math.ceil(duration - matchT), 0);
-        showRing(
-          slot.phase,
-          String(left),
-          left === 1 ? "second left" : "seconds left",
-          1 - matchT / duration
-        );
+        this.timer.set(String(left));
+        if (label) label.textContent = left === 1 ? "second left" : "seconds left";
       }
+      if (this.doll) this.doll.setArmed(armed);
+      if (armed) this.stage.dataset.armed = "true";
+      else delete this.stage.dataset.armed;
 
       // Recomputed from the time, not latched: a scrub backwards puts a
       // player back in, and only a player going out is announced.
-      for (const token of tokens) {
-        const call = demo.eliminations.find(([trackId]) => trackId === token.id);
+      for (const player of players) {
+        const call = demo.eliminations.find(([trackId]) => trackId === player.id);
         const out = call !== undefined && matchT >= call[1];
-        if (out === token.out) continue;
-        token.out = out;
-        token.node.dataset.out = out ? "true" : "false";
-        token.node.querySelector(".tk-why").textContent = out
+        if (out === player.out) continue;
+        player.out = out;
+        player.row.dataset.out = out ? "true" : "false";
+        player.row.querySelector(".bib-state").textContent = out
           ? call[2] === "moved"
             ? "moved"
-            : "lost"
+            : "left"
           : "";
         if (out) {
-          // The recorded reason, shown against the player it belongs to: a
-          // lost track and a caught movement are different failures and the
+          // The recorded reason, against the player it belongs to: a lost
+          // track and a caught movement are different failures, and the
           // replay should not blur them into one.
-          this.setStatus("Player " + call[0] + " out at " + fmt(call[1], 1) + "s: " + call[2] + ".");
+          this.setStatus(
+            "Player " + bib(call[0]) + " out at " + fmt(call[1], 1) + " s: " +
+              (call[2] === "moved" ? "moved on a red light." : "left the frame.")
+          );
         }
       }
 
@@ -1412,32 +1643,16 @@ class Arena {
       cancelAnimationFrame(this.replayTimer);
       this.replayTimer = null;
     }
-    const scene = this.overlay.querySelector(".replay-scene");
-    if (scene) {
-      const video = scene.querySelector(".replay-video");
-      if (video) video.pause();
-      scene.remove();
+    if (this.replayVideo) {
+      this.replayVideo.pause();
+      this.replayVideo.removeAttribute("src");
+      this.replayVideo.remove();
+      this.replayVideo = null;
     }
   }
 }
 
 /* ------------------------------------------------------------------ boot */
-
-/**
- * The three facts in the masthead, read out of the baked config.
- *
- * Typed into the markup they would be three more numbers to keep in step
- * with the engine by hand, and the first one to drift would be the one
- * nobody checks.
- */
-function fillFacts(config) {
-  const clock = el("factClock");
-  if (clock) clock.textContent = "every " + fmt(config.sampleIntervalS, 1) + " s";
-  const window96 = el("factWindow");
-  if (window96) window96.textContent = config.window + " × " + config.window + " px";
-  const cutoff = el("factCutoff");
-  if (cutoff) cutoff.textContent = fmt(config.diffThreshold, 4) + " /s";
-}
 
 function initArena() {
   const data = window.RL_DATA;
@@ -1446,56 +1661,63 @@ function initArena() {
   const arena = new Arena(data);
   window.rlArena = arena;
   arena.setDifficulty("standard");
+  arena.setMode("idle");
   arena.setPhase("LOBBY");
 
-  const play = el("btnPlay");
-  if (play) play.addEventListener("click", () => arena.play());
+  const scrollToStage = () => {
+    const stage = el("console");
+    if (!stage) return;
+    const rect = stage.getBoundingClientRect();
+    // Only move the page if the stage is not already mostly in view.
+    if (rect.top < 0 || rect.top > window.innerHeight * 0.45) {
+      stage.scrollIntoView({ behavior: lessMotion() ? "auto" : "smooth", block: "center" });
+    }
+  };
 
-  for (const trigger of document.querySelectorAll("[data-play-scroll]")) {
-    trigger.addEventListener("click", () => {
-      const stage = el("arena");
-      if (stage) stage.scrollIntoView({ behavior: "smooth", block: "start" });
+  const play = el("btnPlay");
+  if (play) {
+    play.addEventListener("click", () => {
+      scrollToStage();
+      arena.play();
     });
   }
+  const again = el("btnAgain");
+  if (again) again.addEventListener("click", () => arena.play());
 
   for (const trigger of document.querySelectorAll("[data-replay]")) {
     trigger.addEventListener("click", () => {
-      el("arena").scrollIntoView({ behavior: "smooth", block: "start" });
+      scrollToStage();
       arena.startReplay();
     });
   }
 
-  const again = el("btnAgain");
-  if (again) {
-    again.addEventListener("click", () => {
-      arena.stopReplay();
-      arena.resetStage();
-      arena.live = false;
-      if (window.rlHeroDemo) window.rlHeroDemo.resume();
-      arena.endCard.dataset.show = "false";
-      arena.whyCard.dataset.show = "false";
-      arena.stop();
-      arena.overlay.innerHTML = "";
-      arena.roster.innerHTML = "";
-      arena.rows.clear();
-      arena.setPhase("LOBBY");
-      if (arena.idle) arena.idle.hidden = false;
-      const button = el("btnPlay");
-      if (button) button.disabled = false;
+  // Buttons on the stage that change what it shows carry the mode they
+  // switch to, so one listener serves the idle card and the end card.
+  el("stage").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-action]");
+    if (!button) return;
+    if (button.dataset.action === "demo") arena.startDemo();
+    else if (button.dataset.action === "replay") arena.startReplay();
+  });
+
+  const stop = el("btnStop");
+  if (stop) {
+    stop.addEventListener("click", () => {
+      if (arena.autoplay) arena.startDemo();
+      else arena.idleDemo();
     });
   }
 
   const sound = el("btnSound");
   if (sound) {
-    // The label always names the state the button is currently in — "Sound
-    // on" when the chant is audible — never the action a click would take.
-    // Read from `arena.chant.muted` rather than the button's own last
-    // attribute, so the label matches reality even before anyone has
-    // clicked it: the chant starts unmuted, so the button starts saying so.
+    // The label always names the state the sound is in, read from the chant
+    // itself rather than the button's last attribute, so it matches reality
+    // before anyone has clicked it.
     const syncSound = () => {
       const muted = arena.chant.muted;
       sound.setAttribute("aria-pressed", muted ? "false" : "true");
-      sound.textContent = muted ? "Sound off" : "Sound on";
+      sound.setAttribute("aria-label", muted ? "Sound off" : "Sound on");
+      sound.title = muted ? "Sound is off for your matches" : "Sound is on for your matches";
     };
     sound.addEventListener("click", () => {
       arena.chant.setMuted(!arena.chant.muted);
@@ -1507,11 +1729,55 @@ function initArena() {
   for (const button of document.querySelectorAll("#difficulty button")) {
     button.addEventListener("click", () => arena.setDifficulty(button.dataset.level));
   }
+
+  // The demo opens the page, unless the visitor has asked for less motion or
+  // a headless check is about to drive the arena itself.
+  const action = new URLSearchParams(window.location.search).get("action");
+  const autoplay = !lessMotion() && (!Probe.on || action === "demo");
+  arena.autoplay = autoplay;
+  if (arena.scene && autoplay) {
+    arena.startDemo();
+  } else if (arena.scene && !Probe.on) {
+    arena.idleDemo();
+  } else if (arena.scene) {
+    arena.setMode("demo");
+    arena.scene.reset();
+  }
+
+  // Pause the demo while the stage is out of sight, and pick it up again
+  // when it comes back.
+  const consoleNode = el("console");
+  let inView = true;
+  const sync = () => {
+    if (arena.mode !== "demo" || !autoplay) return;
+    const visible = inView && !document.hidden;
+    if (!visible) arena.pauseDemo();
+    else if (arena.demoPaused) arena.startDemo();
+  };
+  if (consoleNode && "IntersectionObserver" in window) {
+    new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          inView = entry.isIntersecting && entry.intersectionRatio >= 0.12;
+        }
+        sync();
+      },
+      { threshold: [0, 0.12] }
+    ).observe(consoleNode);
+  }
+  document.addEventListener("visibilitychange", sync);
+
+  // Opening the measurements view hides the stage. A camera or a recording
+  // left running there would be a camera on, or a video playing, for nobody.
+  window.addEventListener("rl-view", (event) => {
+    if (event.detail !== "measurements") return;
+    if (arena.mode !== "camera" && arena.mode !== "replay") return;
+    if (arena.autoplay) arena.pauseDemo();
+    else arena.idleDemo();
+  });
 }
 
 document.addEventListener("DOMContentLoaded", () => {
   initTheme();
-  window.rlHeroDemo = initHeroDemo();
-  if (window.RL_DATA) fillFacts(window.RL_DATA.config);
   initArena();
 });
